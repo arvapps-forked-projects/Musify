@@ -37,6 +37,7 @@ import 'package:musify/services/router_service.dart';
 import 'package:musify/services/settings_manager.dart';
 import 'package:musify/services/update_manager.dart';
 import 'package:musify/style/app_themes.dart';
+import 'package:musify/style/dynamic_color_temp_fix.dart';
 
 late MusifyAudioHandler audioHandler;
 
@@ -102,9 +103,6 @@ class _MusifyState extends State<Musify> {
       if (newThemeMode != null) {
         themeMode = newThemeMode;
         brightness = getBrightnessFromThemeMode(newThemeMode);
-        setSystemUIOverlayStyle(
-          brightness == Brightness.dark ? Brightness.light : Brightness.dark,
-        );
       }
       if (newLocale != null) {
         languageSetting = newLocale;
@@ -127,14 +125,6 @@ class _MusifyState extends State<Musify> {
   @override
   void initState() {
     super.initState();
-
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.edgeToEdge,
-      overlays: [SystemUiOverlay.top],
-    );
-    setSystemUIOverlayStyle(
-      brightness == Brightness.dark ? Brightness.light : Brightness.dark,
-    );
 
     try {
       LicenseRegistry.addLicense(() async* {
@@ -164,6 +154,15 @@ class _MusifyState extends State<Musify> {
   Widget build(BuildContext context) {
     return DynamicColorBuilder(
       builder: (lightColorScheme, darkColorScheme) {
+        // Temporary fix until this will be fixed: https://github.com/material-foundation/flutter-packages/issues/582
+
+        if (darkColorScheme != null && lightColorScheme != null)
+          (lightColorScheme, darkColorScheme) =
+              tempGenerateDynamicColourSchemes(
+            lightColorScheme,
+            darkColorScheme,
+          );
+
         final selectedScheme =
             brightness == Brightness.light ? lightColorScheme : darkColorScheme;
 
