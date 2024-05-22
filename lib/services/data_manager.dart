@@ -23,8 +23,18 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:musify/extensions/l10n.dart';
+
+void initializeDatabases() async {
+  await Hive.initFlutter();
+
+  final boxNames = ['settings', 'user', 'userNoBackup', 'cache'];
+
+  for (final boxName in boxNames) {
+    await Hive.openBox(boxName);
+  }
+}
 
 void addOrUpdateData(String category, String key, dynamic value) async {
   final _box = await _openBox(category);
