@@ -22,10 +22,10 @@
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:musify/API/musify.dart';
 import 'package:musify/main.dart';
+import 'package:musify/widgets/like_button.dart';
 import 'package:musify/widgets/marque.dart';
 import 'package:musify/widgets/no_artwork_cube.dart';
 
@@ -47,17 +47,13 @@ class SongCube extends StatelessWidget {
   final VoidCallback? onPlay;
   final double size;
 
-  static const likeStatusToIconMapper = {
-    true: FluentIcons.star_24_filled,
-    false: FluentIcons.star_24_regular,
-  };
-
   late final songLikeStatus =
       ValueNotifier<bool>(isSongAlreadyLiked(song['ytid']));
 
   @override
   Widget build(BuildContext context) {
-    final _secondaryColor = Theme.of(context).colorScheme.secondary;
+    final _onSecondaryColor =
+        Theme.of(context).colorScheme.onSecondaryContainer;
     final _onPrimaryColor = Theme.of(context).colorScheme.onPrimary;
 
     final bool isOffline = song['isOffline'] ?? false;
@@ -115,30 +111,20 @@ class SongCube extends StatelessWidget {
                   return Positioned(
                     bottom: 5,
                     right: 5,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: _secondaryColor,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: IconButton(
-                        onPressed: () {
-                          songLikeStatus.value = !songLikeStatus.value;
-                          updateSongLikeStatus(
-                            song['ytid'],
-                            songLikeStatus.value,
-                          );
-                          final likedSongsLength =
-                              currentLikedSongsLength.value;
-                          currentLikedSongsLength.value = value
-                              ? likedSongsLength + 1
-                              : likedSongsLength - 1;
-                        },
-                        icon: Icon(
-                          likeStatusToIconMapper[value],
-                          color: _onPrimaryColor,
-                          size: 25,
-                        ),
-                      ),
+                    child: LikeButton(
+                      onPrimaryColor: _onPrimaryColor,
+                      onSecondaryColor: _onSecondaryColor,
+                      isLiked: value,
+                      onPressed: () {
+                        songLikeStatus.value = !songLikeStatus.value;
+                        updateSongLikeStatus(
+                          song['ytid'],
+                          songLikeStatus.value,
+                        );
+                        final likedSongsLength = currentLikedSongsLength.value;
+                        currentLikedSongsLength.value =
+                            value ? likedSongsLength + 1 : likedSongsLength - 1;
+                      },
                     ),
                   );
                 },

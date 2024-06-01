@@ -51,8 +51,8 @@ class SongBar extends StatelessWidget {
   final bool showMusicDuration;
 
   static const likeStatusToIconMapper = {
-    true: FluentIcons.star_24_filled,
-    false: FluentIcons.star_24_regular,
+    true: FluentIcons.heart_24_filled,
+    false: FluentIcons.heart_24_regular,
   };
 
   @override
@@ -169,7 +169,7 @@ class SongBar extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (offlineMode.value)
+        if (!offlineMode.value)
           Row(
             children: [
               ValueListenableBuilder<bool>(
