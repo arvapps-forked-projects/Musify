@@ -463,6 +463,9 @@ class NowPlayingPage extends StatelessWidget {
                       child: SongBar(
                         activePlaylist['list'][index],
                         false,
+                        onPlay: () => {
+                          audioHandler.playPlaylistSong(songIndex: index),
+                        },
                         backgroundColor:
                             Theme.of(context).colorScheme.secondaryContainer,
                       ),
@@ -497,22 +500,6 @@ class NowPlayingPage extends StatelessWidget {
                   updateSongLikeStatus(audioId, !songLikeStatus.value);
                   songLikeStatus.value = !songLikeStatus.value;
                 },
-              );
-            },
-          ),
-        if (!offlineMode.value)
-          ValueListenableBuilder<bool>(
-            valueListenable: playNextSongAutomatically,
-            builder: (_, value, __) {
-              return IconButton.filledTonal(
-                icon: Icon(
-                  value
-                      ? FluentIcons.music_note_2_play_20_filled
-                      : FluentIcons.music_note_2_play_20_regular,
-                  color: _primaryColor,
-                ),
-                iconSize: iconSize,
-                onPressed: audioHandler.changeAutoPlayNextStatus,
               );
             },
           ),
