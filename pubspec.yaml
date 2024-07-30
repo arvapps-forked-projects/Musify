@@ -5,7 +5,7 @@ repository: https://github.com/gokadzev/Musify
 issue_tracker: https://github.com/gokadzev/Musify/issues
 
 publish_to: 'none'
-version: 8.3.0+96 # run update.sh after changing the version
+version: 8.4.0+97 # run update.sh after changing the version
 
 environment:
   sdk: '>=3.4.4 <4.0.0'
@@ -17,7 +17,7 @@ dependencies:
   cached_network_image: ^3.3.1
   dynamic_color: ^1.7.0
   file_picker: ^8.0.6
-  fluentui_system_icons: ^1.1.248
+  fluentui_system_icons: ^1.1.249
   flutter:
     sdk: flutter
   flutter_flip_card: ^0.0.6

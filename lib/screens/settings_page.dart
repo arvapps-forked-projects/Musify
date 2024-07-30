@@ -44,7 +44,7 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
     final activatedColor =
-        Theme.of(context).colorScheme.inversePrimary; // or primaryfixeddim
+        Theme.of(context).colorScheme.surfaceContainerHighest;
     final inactivatedColor = Theme.of(context).colorScheme.secondaryContainer;
 
     return Scaffold(
@@ -200,7 +200,6 @@ class SettingsPage extends StatelessWidget {
                                 languageCode,
                               ),
                             );
-
                             showToast(
                               context,
                               context.l10n!.languageMsg,
@@ -305,6 +304,30 @@ class SettingsPage extends StatelessWidget {
                   },
                 ),
               ),
+            ValueListenableBuilder<bool>(
+              valueListenable: useSquigglySlider,
+              builder: (_, value, __) {
+                return CustomBar(
+                  context.l10n!.useSquigglySlider,
+                  FluentIcons.options_24_filled,
+                  trailing: Switch(
+                    value: useSquigglySlider.value,
+                    onChanged: (value) {
+                      addOrUpdateData(
+                        'settings',
+                        'useSquigglySlider',
+                        value,
+                      );
+                      useSquigglySlider.value = value;
+                      showToast(
+                        context,
+                        context.l10n!.settingChangedMsg,
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
             ValueListenableBuilder<bool>(
               valueListenable: offlineMode,
               builder: (_, value, __) {
