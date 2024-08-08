@@ -83,6 +83,10 @@ class NowPlayingPage extends StatelessWidget {
     const _radius = 17.0;
     final screen = (size.width + size.height) / 3.05;
     final imageSize = screen - _padding;
+    const lyricsTextStyle = TextStyle(
+      fontSize: 24,
+      fontWeight: FontWeight.w500,
+    );
 
     return FlipCard(
       rotateSide: RotateSide.right,
@@ -101,36 +105,40 @@ class NowPlayingPage extends StatelessWidget {
           color: Theme.of(context).colorScheme.secondaryContainer,
           borderRadius: BorderRadius.circular(_radius),
         ),
-        child: ValueListenableBuilder<String?>(
-          valueListenable: lyrics,
-          builder: (_, value, __) {
-            if (lastFetchedLyrics != '${metadata.artist} - ${metadata.title}') {
-              getSongLyrics(
-                metadata.artist ?? '',
-                metadata.title,
+        child: FutureBuilder<String?>(
+          future: getSongLyrics(metadata.artist ?? '', metadata.title),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Spinner();
+            } else if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  context.l10n!.lyricsNotAvailable,
+                  style: lyricsTextStyle.copyWith(
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               );
-            }
-            if (value != null && value != 'not found') {
+            } else if (snapshot.hasData && snapshot.data != 'not found') {
               return SingleChildScrollView(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
                 child: Center(
                   child: Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 16,
+                    snapshot.data!,
+                    style: lyricsTextStyle.copyWith(
+                      color: Theme.of(context).colorScheme.secondary,
                     ),
                     textAlign: TextAlign.center,
                   ),
                 ),
               );
-            } else if (value == null) {
-              return const Spinner();
             } else {
               return Center(
                 child: Text(
                   context.l10n!.lyricsNotAvailable,
-                  style: const TextStyle(
-                    fontSize: 25,
+                  style: lyricsTextStyle.copyWith(
+                    color: Theme.of(context).colorScheme.secondary,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -456,20 +464,14 @@ class NowPlayingPage extends StatelessWidget {
                     BuildContext context,
                     int index,
                   ) {
-                    return Padding(
-                      padding: const EdgeInsets.only(
-                        top: 5,
-                        bottom: 5,
-                      ),
-                      child: SongBar(
-                        activePlaylist['list'][index],
-                        false,
-                        onPlay: () => {
-                          audioHandler.playPlaylistSong(songIndex: index),
-                        },
-                        backgroundColor:
-                            Theme.of(context).colorScheme.secondaryContainer,
-                      ),
+                    return SongBar(
+                      activePlaylist['list'][index],
+                      false,
+                      onPlay: () => {
+                        audioHandler.playPlaylistSong(songIndex: index),
+                      },
+                      backgroundColor:
+                          Theme.of(context).colorScheme.secondaryContainer,
                     );
                   },
                 ),

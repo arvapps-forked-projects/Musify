@@ -616,7 +616,7 @@ Future<Map<String, dynamic>> getSongDetails(
   }
 }
 
-Future getSongLyrics(String artist, String title) async {
+Future<String?> getSongLyrics(String artist, String title) async {
   if (lastFetchedLyrics != '$artist - $title') {
     lyrics.value = null;
     final _lyrics = await LyricsManager().fetchLyrics(artist, title);
@@ -703,10 +703,12 @@ Future<File?> _downloadAndSaveArtworkFile(String url, String filePath) async {
   return null;
 }
 
+const recentlyPlayedSongsLimit = 50;
+
 Future<void> updateRecentlyPlayed(dynamic songId) async {
   if (userRecentlyPlayed.length == 1 && userRecentlyPlayed[0]['ytid'] == songId)
     return;
-  if (userRecentlyPlayed.length >= 20) {
+  if (userRecentlyPlayed.length >= recentlyPlayedSongsLimit) {
     userRecentlyPlayed.removeLast();
   }
 
