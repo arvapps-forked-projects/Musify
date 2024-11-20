@@ -141,8 +141,6 @@ class _UserSongsPageState extends State<UserSongsPage> {
   Widget _buildPlaylistImage(String title, IconData icon) {
     return PlaylistCube(
       {'title': title},
-      onClickOpen: false,
-      showFavoriteButton: false,
       size: MediaQuery.sizeOf(context).width / 2.5,
       cubeIcon: icon,
     );
@@ -156,6 +154,7 @@ class _UserSongsPageState extends State<UserSongsPage> {
     final _playlist = {
       'ytid': '',
       'title': title,
+      'source': 'user-created',
       'list': songsList,
     };
     return ValueListenableBuilder(

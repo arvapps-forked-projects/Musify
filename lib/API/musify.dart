@@ -22,7 +22,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/widgets.dart';
 import 'package:hive/hive.dart';
@@ -60,8 +59,11 @@ Map activePlaylist = {
   'ytid': '',
   'title': 'No Playlist',
   'image': '',
+  'source': 'user-created',
   'list': [],
 };
+
+dynamic nextRecommendedSong;
 
 final currentLikedSongsLength = ValueNotifier<int>(userLikedSongsList.length);
 final currentLikedPlaylistsLength =
@@ -137,6 +139,7 @@ Future<List<dynamic>> getUserPlaylists() async {
         'ytid': plist.id.toString(),
         'title': plist.title,
         'image': null,
+        'source': 'user-youtube',
         'list': [],
       });
     } catch (e, stackTrace) {
@@ -144,6 +147,7 @@ Future<List<dynamic>> getUserPlaylists() async {
         'ytid': playlistID.toString(),
         'title': 'Failed playlist',
         'image': null,
+        'source': 'user-youtube',
         'list': [],
       });
       logger.log(
@@ -186,10 +190,16 @@ Future<String> addUserPlaylist(String input, BuildContext context) async {
   }
 
   try {
-    await _yt.playlists.get(playlistId);
+    final _playlist = await _yt.playlists.get(playlistId);
 
     if (userPlaylists.contains(playlistId)) {
       return '${context.l10n!.playlistAlreadyExists}!';
+    }
+
+    if (_playlist.title.isEmpty &&
+        _playlist.author.isEmpty &&
+        _playlist.videoCount == null) {
+      return '${context.l10n!.invalidYouTubePlaylist}!';
     }
 
     userPlaylists.add(playlistId);
@@ -207,7 +217,7 @@ String createCustomPlaylist(
 ) {
   final customPlaylist = {
     'title': playlistName,
-    'isCustom': true,
+    'source': 'user-created',
     if (image != null) 'image': image,
     'list': [],
   };
@@ -250,7 +260,7 @@ void removeSongFromPlaylist(
       : playlistSongs
           .removeWhere((song) => song['ytid'] == songToRemove['ytid']);
   playlist['list'] = playlistSongs;
-  if (playlist['isCustom'])
+  if (playlist['source'] == 'user-created')
     addOrUpdateData('user', 'customPlaylists', userCustomPlaylists);
   else
     addOrUpdateData('user', 'playlists', userPlaylists);
@@ -286,15 +296,23 @@ void moveLikedSong(int oldIndex, int newIndex) {
 }
 
 Future<void> updatePlaylistLikeStatus(
-  Map likedPlaylist,
+  String playlistId,
   bool add,
 ) async {
   if (add) {
-    userLikedPlaylists.add(likedPlaylist);
+    final playlist = playlists.firstWhere(
+      (playlist) => playlist['ytid'] == playlistId,
+      orElse: () => {},
+    );
+
+    if (playlist.isNotEmpty) {
+      userLikedPlaylists.add(playlist);
+    }
   } else {
     userLikedPlaylists
-        .removeWhere((playlist) => playlist['ytid'] == likedPlaylist['ytid']);
+        .removeWhere((playlist) => playlist['ytid'] == playlistId);
   }
+
   addOrUpdateData('user', 'likedPlaylists', userLikedPlaylists);
 }
 
@@ -342,6 +360,7 @@ Future<List> getPlaylists({
           final playlistMap = {
             'ytid': playlist.id.toString(),
             'title': playlist.title,
+            'source': 'youtube',
             'list': [],
           };
 
@@ -468,13 +487,17 @@ Future<List<Map<String, int>>> getSkipSegments(String id) async {
   }
 }
 
-Future<Map> getRandomSong() async {
-  if (globalSongs.isEmpty) {
-    const playlistId = 'PLgzTt0k8mXzEk586ze4BjvDXR7c-TUSnx';
-    globalSongs = await getSongsFromPlaylist(playlistId);
-  }
+void getSimilarSong(String songYtId) async {
+  try {
+    final song = await _yt.videos.get(songYtId);
+    final relatedSongs = await _yt.videos.getRelatedVideos(song) ?? [];
 
-  return globalSongs[Random().nextInt(globalSongs.length)];
+    if (relatedSongs.isNotEmpty) {
+      nextRecommendedSong = returnSongLayout(0, relatedSongs[0]);
+    }
+  } catch (e, stackTrace) {
+    logger.log('Error while fetching next similar song:', e, stackTrace);
+  }
 }
 
 Future<List> getSongsFromPlaylist(dynamic playlistId) async {
@@ -562,7 +585,8 @@ Future<Map<String, dynamic>?> getPlaylistInfoForWidget(
 
 Future<AudioOnlyStreamInfo> getSongManifest(String songId) async {
   try {
-    final manifest = await _yt.videos.streamsClient.getManifest(songId);
+    final manifest = await _yt.videos.streamsClient
+        .getManifest(songId, requireWatchPage: false);
     final audioStream = manifest.audioOnly.withHighestBitrate();
     return audioStream;
   } catch (e, stackTrace) {
@@ -576,7 +600,6 @@ const Duration _cacheDuration = Duration(hours: 6);
 Future<String> getSong(String songId, bool isLive) async {
   try {
     final qualitySetting = audioQualitySetting.value;
-
     final cacheKey = 'song_${songId}_${qualitySetting}_url';
 
     final cachedUrl = await getData(
@@ -587,13 +610,19 @@ Future<String> getSong(String songId, bool isLive) async {
 
     unawaited(updateRecentlyPlayed(songId));
 
+    if (playNextSongAutomatically.value) {
+      getSimilarSong(songId);
+    }
+
     if (cachedUrl != null) {
       return cachedUrl;
-    } else if (isLive) {
-      return await getLiveStreamUrl(songId);
-    } else {
-      return await getAudioUrl(songId, cacheKey);
     }
+
+    if (isLive) {
+      return await getLiveStreamUrl(songId);
+    }
+
+    return await getAudioUrl(songId, cacheKey);
   } catch (e, stackTrace) {
     logger.log('Error while getting song streaming URL', e, stackTrace);
     rethrow;
@@ -610,7 +639,8 @@ Future<String> getAudioUrl(
   String songId,
   String cacheKey,
 ) async {
-  final manifest = await _yt.videos.streamsClient.getManifest(songId);
+  final manifest = await _yt.videos.streamsClient
+      .getManifest(songId, requireWatchPage: false);
   final audioQuality = selectAudioQuality(manifest.audioOnly.sortByBitrate());
   final audioUrl = audioQuality.url.toString();
 

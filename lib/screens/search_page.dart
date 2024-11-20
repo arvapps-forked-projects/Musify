@@ -89,9 +89,7 @@ class _SearchPageState extends State<SearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(context.l10n!.search),
-      ),
+      appBar: AppBar(title: Text(context.l10n!.search)),
       body: SingleChildScrollView(
         child: Column(
           children: <Widget>[

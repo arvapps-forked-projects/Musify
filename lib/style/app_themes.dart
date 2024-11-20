@@ -99,13 +99,15 @@ ThemeData getAppTheme(ColorScheme colorScheme) {
   return ThemeData(
     scaffoldBackgroundColor: bgColor,
     colorScheme: colorScheme,
+    cardColor: bgColor,
     appBarTheme: base.appBarTheme.copyWith(
       backgroundColor: bgColor,
       iconTheme: IconThemeData(color: colorScheme.primary),
       centerTitle: true,
       titleTextStyle: TextStyle(
         fontSize: 30,
-        fontWeight: FontWeight.bold,
+        fontFamily: 'paytoneOne',
+        fontWeight: FontWeight.w300,
         color: colorScheme.primary,
       ),
       elevation: 0,
@@ -114,6 +116,7 @@ ThemeData getAppTheme(ColorScheme colorScheme) {
       textColor: colorScheme.primary,
       iconColor: colorScheme.primary,
     ),
+    bottomSheetTheme: base.bottomSheetTheme.copyWith(backgroundColor: bgColor),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       isDense: true,
@@ -123,9 +126,8 @@ ThemeData getAppTheme(ColorScheme colorScheme) {
       ),
       contentPadding: const EdgeInsets.fromLTRB(18, 14, 20, 14),
     ),
-    navigationBarTheme: isPureBlackUsable && bgColor != null
-        ? base.navigationBarTheme.copyWith(backgroundColor: bgColor)
-        : null,
+    navigationBarTheme:
+        base.navigationBarTheme.copyWith(backgroundColor: bgColor),
     visualDensity: VisualDensity.adaptivePlatformDensity,
     useMaterial3: true,
     pageTransitionsTheme: PageTransitionsTheme(

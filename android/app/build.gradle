@@ -32,7 +32,6 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.gokadzev.musify"
     compileSdk 34
-    ndkVersion "26.2.11394342"
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -87,6 +86,13 @@ android {
 
     buildFeatures {
         buildConfig = true
+    }
+
+    dependenciesInfo {
+        // Disables dependency metadata when building APKs.
+        includeInApk = false
+        // Disables dependency metadata when building Android App Bundles.
+        includeInBundle = false
     }
 
     buildTypes {
