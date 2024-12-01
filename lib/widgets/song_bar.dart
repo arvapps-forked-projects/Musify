@@ -118,7 +118,7 @@ class SongBar extends StatelessWidget {
   }
 
   Widget _buildAlbumArt(Color primaryColor) {
-    const size = 60.0;
+    const size = 55.0;
 
     final bool isOffline = song['isOffline'] ?? false;
     final String? artworkPath = song['artworkPath'];
@@ -172,12 +172,11 @@ class SongBar extends StatelessWidget {
               borderRadius: commonBarRadius,
               child: Image(
                 color: isDurationAvailable
-                    ? Theme.of(context).colorScheme.onPrimary
+                    ? Theme.of(context).colorScheme.primaryContainer
                     : null,
-                colorBlendMode:
-                    isDurationAvailable ? BlendMode.colorBurn : null,
+                colorBlendMode: isDurationAvailable ? BlendMode.multiply : null,
                 opacity: isDurationAvailable
-                    ? const AlwaysStoppedAnimation(0.35)
+                    ? const AlwaysStoppedAnimation(0.45)
                     : null,
                 image: imageProvider,
                 centerSlice: const Rect.fromLTRB(1, 1, 1, 1),
@@ -188,9 +187,18 @@ class SongBar extends StatelessWidget {
               const NullArtworkWidget(iconSize: 30),
         ),
         if (isDurationAvailable)
-          Text(
-            '(${formatDuration(song['duration'])})',
-            style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+          SizedBox(
+            width: size - 10,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '(${formatDuration(song['duration'])})',
+                style: TextStyle(
+                  color: primaryColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ),
       ],
     );
