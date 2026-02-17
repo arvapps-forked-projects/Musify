@@ -55,7 +55,6 @@ bool isUpdateChecked = false;
 
 const appLanguages = <String, String>{
   'English': 'en',
-  'Arabic': 'ar',
   'Chinese (Simplified)': 'zh',
   'Chinese (Traditional)': 'zh-Hant',
   'Estonian': 'et',
@@ -318,10 +317,12 @@ void handleIncomingLink(Uri? uri) async {
 
         if (playlist != null) {
           userCustomPlaylists.value = [...userCustomPlaylists.value, playlist];
-          await addOrUpdateData(
-            'user',
-            'customPlaylists',
-            userCustomPlaylists.value,
+          unawaited(
+            addOrUpdateData(
+              'user',
+              'customPlaylists',
+              userCustomPlaylists.value,
+            ),
           );
           showToast(
             NavigationManager().context,
