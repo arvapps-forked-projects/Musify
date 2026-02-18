@@ -65,6 +65,24 @@ class _SearchPageState extends State<SearchPage> {
   List<dynamic> _playlistsSearchResult = [];
   List<String> _suggestionsList = [];
   Timer? _debounce;
+  int _latestSuggestionRequest = 0;
+
+  Future<void> _submitSearch([String? query]) async {
+    if (query != null) {
+      _searchBar.text = query;
+      _searchBar.selection = TextSelection.fromPosition(
+        TextPosition(offset: _searchBar.text.length),
+      );
+    }
+
+    _latestSuggestionRequest++;
+    _debounce?.cancel();
+    _suggestionsList = [];
+    if (mounted) setState(() {});
+
+    await search();
+    _inputNode.unfocus();
+  }
 
   @override
   void dispose() {
@@ -133,17 +151,28 @@ class _SearchPageState extends State<SearchPage> {
                     onChanged: (value) {
                       // debounce suggestions to avoid rapid API calls
                       _debounce?.cancel();
+                      final query = value;
+                      final requestId = ++_latestSuggestionRequest;
                       _debounce = Timer(
                         const Duration(milliseconds: 300),
                         () async {
-                          if (value.isNotEmpty) {
+                          if (query.isNotEmpty) {
                             final searchSuggestions =
-                                await getSearchSuggestions(value);
+                                await getSearchSuggestions(query);
+
+                            if (!mounted ||
+                                requestId != _latestSuggestionRequest ||
+                                _searchBar.text != query) {
+                              return;
+                            }
 
                             _suggestionsList = List<String>.from(
                               searchSuggestions,
                             );
                           } else {
+                            if (requestId != _latestSuggestionRequest) {
+                              return;
+                            }
                             _suggestionsList = [];
                           }
                           if (mounted) setState(() {});
@@ -151,9 +180,7 @@ class _SearchPageState extends State<SearchPage> {
                       );
                     },
                     onSubmitted: (String value) {
-                      search();
-                      _suggestionsList = [];
-                      _inputNode.unfocus();
+                      _submitSearch();
                     },
                   ),
                 );
@@ -173,7 +200,8 @@ class _SearchPageState extends State<SearchPage> {
               child:
                   (_suggestionsList.isNotEmpty ||
                       (_songsSearchResult.isEmpty &&
-                          _albumsSearchResult.isEmpty))
+                          _albumsSearchResult.isEmpty &&
+                          _playlistsSearchResult.isEmpty))
                   ? ValueListenableBuilder<List>(
                       valueListenable: searchHistoryNotifier,
                       builder: (context, searchHistory, _) {
@@ -200,9 +228,7 @@ class _SearchPageState extends State<SearchPage> {
                                     FluentIcons.search_24_regular,
                                     borderRadius: borderRadius,
                                     onTap: () async {
-                                      _searchBar.text = query;
-                                      await search();
-                                      _inputNode.unfocus();
+                                      await _submitSearch(query.toString());
                                     },
                                     onLongPress: () async {
                                       final confirm =

@@ -43,9 +43,12 @@ import 'package:musify/services/settings_manager.dart';
 import 'package:musify/services/update_manager.dart';
 import 'package:musify/style/app_themes.dart';
 import 'package:musify/utilities/flutter_toast.dart';
+import 'package:musify/utilities/sharing_intent.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 late MusifyAudioHandler audioHandler;
+late StreamSubscription<String?> sharingIntentSubscription;
 
 final logger = Logger();
 final appLinks = AppLinks();
@@ -155,6 +158,21 @@ class _MusifyState extends State<Musify> {
 
     offlineMode.addListener(_onOfflineModeChanged);
 
+    sharingIntentSubscription = ReceiveSharingIntent.getTextStream().listen(
+      (String? value) async {
+        await consumeYoutubeSharedTextIntent(
+          value,
+          audioHandler: audioHandler,
+          onError: (error, stackTrace) {
+            logger.log('Error while playing shared song:', error, stackTrace);
+          },
+        );
+      },
+      onError: (err) {
+        logger.log('getTextStream error:', err, null);
+      },
+    );
+
     try {
       LicenseRegistry.addLicense(() async* {
         final license = await rootBundle.loadString(
@@ -198,6 +216,7 @@ class _MusifyState extends State<Musify> {
     offlineMode.removeListener(_onOfflineModeChanged);
 
     Hive.close();
+    sharingIntentSubscription.cancel();
     super.dispose();
   }
 
@@ -329,11 +348,17 @@ void handleIncomingLink(Uri? uri) async {
             '${NavigationManager().context.l10n!.addedSuccess}!',
           );
         } else {
-          showToast(NavigationManager().context, 'Invalid playlist data');
+          showToast(
+            NavigationManager().context,
+            NavigationManager().context.l10n!.failedToLoadPlaylist,
+          );
         }
       }
     } catch (e) {
-      showToast(NavigationManager().context, 'Failed to load playlist');
+      showToast(
+        NavigationManager().context,
+        NavigationManager().context.l10n!.failedToLoadPlaylist,
+      );
     }
   }
 }
