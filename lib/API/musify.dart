@@ -326,7 +326,9 @@ String createCustomPlaylist(
     'createdAt': creationTime,
   };
   userCustomPlaylists.value = [...userCustomPlaylists.value, customPlaylist];
-  addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value);
+  unawaited(
+    addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
+  );
   return '${context.l10n!.addedSuccess}!';
 }
 
@@ -351,7 +353,9 @@ String addSongInCustomPlaylist(
     indexToInsert != null
         ? playlistSongs.insert(indexToInsert, song)
         : playlistSongs.add(song);
-    addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value);
+    unawaited(
+      addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
+    );
     return context.l10n!.songAdded;
   } else {
     logger.log('Custom playlist not found: $playlistName', null, null);
@@ -383,9 +387,11 @@ bool removeSongFromPlaylist(
 
     try {
       if (playlist['source'] == 'user-created') {
-        addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value);
+        unawaited(
+          addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
+        );
       } else {
-        addOrUpdateData('user', 'playlists', userPlaylists.value);
+        unawaited(addOrUpdateData('user', 'playlists', userPlaylists.value));
       }
     } catch (e, stackTrace) {
       logger.log('Error saving playlist changes', e, stackTrace);
@@ -402,14 +408,16 @@ bool removeSongFromPlaylist(
 void removeUserPlaylist(String playlistId) {
   final updatedPlaylists = List.from(userPlaylists.value)..remove(playlistId);
   userPlaylists.value = updatedPlaylists;
-  addOrUpdateData('user', 'playlists', userPlaylists.value);
+  unawaited(addOrUpdateData('user', 'playlists', userPlaylists.value));
 }
 
 void removeUserCustomPlaylist(dynamic playlist) {
   final updatedPlaylists = List.from(userCustomPlaylists.value)
     ..remove(playlist);
   userCustomPlaylists.value = updatedPlaylists;
-  addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value);
+  unawaited(
+    addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
+  );
 }
 
 // Playlist Folders Management Functions
@@ -438,7 +446,9 @@ String createPlaylistFolder(String folderName, [BuildContext? context]) {
   };
 
   userPlaylistFolders.value = [...userPlaylistFolders.value, newFolder];
-  addOrUpdateData('user', 'playlistFolders', userPlaylistFolders.value);
+  unawaited(
+    addOrUpdateData('user', 'playlistFolders', userPlaylistFolders.value),
+  );
   return context?.l10n?.addedSuccess ?? 'Added successfully';
 }
 
@@ -498,9 +508,13 @@ String movePlaylistToFolder(
     userCustomPlaylists.value = updatedCustomPlaylists;
     userPlaylists.value = updatedYoutubePlaylists;
 
-    addOrUpdateData('user', 'playlistFolders', userPlaylistFolders.value);
-    addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value);
-    addOrUpdateData('user', 'playlists', userPlaylists.value);
+    unawaited(
+      addOrUpdateData('user', 'playlistFolders', userPlaylistFolders.value),
+    );
+    unawaited(
+      addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
+    );
+    unawaited(addOrUpdateData('user', 'playlists', userPlaylists.value));
 
     return '${context.l10n!.addedSuccess}!';
   } catch (e, stackTrace) {
@@ -546,9 +560,13 @@ String deletePlaylistFolder(String folderId, [BuildContext? context]) {
       userCustomPlaylists.value = updatedCustomPlaylists;
       userPlaylists.value = updatedYoutubePlaylists;
 
-      addOrUpdateData('user', 'playlistFolders', userPlaylistFolders.value);
-      addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value);
-      addOrUpdateData('user', 'playlists', userPlaylists.value);
+      unawaited(
+        addOrUpdateData('user', 'playlistFolders', userPlaylistFolders.value),
+      );
+      unawaited(
+        addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
+      );
+      unawaited(addOrUpdateData('user', 'playlists', userPlaylists.value));
 
       return context?.l10n?.folderDeleted ?? 'Folder deleted successfully';
     }
@@ -620,7 +638,7 @@ void moveLikedSong(int oldIndex, int newIndex) {
     ..removeAt(oldIndex)
     ..insert(newIndex, _song);
   currentLikedSongsLength.value = userLikedSongsList.length;
-  addOrUpdateData('user', 'likedSongs', userLikedSongsList);
+  unawaited(addOrUpdateData('user', 'likedSongs', userLikedSongsList));
 }
 
 Future<void> renameSongInLikedSongs(
@@ -1094,7 +1112,7 @@ Future<AudioOnlyStreamInfo?> fetchBestAudioStream(String? songId) async {
       );
       return null;
     }
-    return audioStream.withHighestBitrate();
+    return selectAudioOnlyStreamForQuality(audioStream.sortByBitrate());
   } on TimeoutException catch (_) {
     logger.log(
       'fetchBestAudioStream request timed out for $songId',
@@ -1161,21 +1179,6 @@ Future<String?> fetchSongStreamUrl(String songId, bool isLive) async {
     logger.log('Error in fetchSongStreamUrl for $songId:', e, stackTrace);
     return null;
   }
-}
-
-/// Selects the best audio stream based on the configured quality.
-AudioStreamInfo selectAudioStreamForQuality(
-  List<AudioStreamInfo> availableSources,
-) {
-  final qualitySetting = audioQualitySetting.value;
-
-  if (qualitySetting == 'low') {
-    return availableSources.last;
-  } else if (qualitySetting == 'medium') {
-    return availableSources[availableSources.length ~/ 2];
-  }
-
-  return availableSources.withHighestBitrate();
 }
 
 Future<Map<String, dynamic>> getSongDetails(

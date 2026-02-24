@@ -55,10 +55,20 @@ class _HomePageState extends State<HomePage> {
               valueListenable: announcementURL,
               builder: (_, _url, __) {
                 if (_url == null) return const SizedBox.shrink();
+                final isSponsorshipAnnouncement = isSponsorshipAnnouncementUrl(
+                  _url,
+                );
+                final _message = isSponsorshipAnnouncement
+                    ? context.l10n!.sponsorProject
+                    : context.l10n!.newAnnouncement;
+                final _icon = isSponsorshipAnnouncement
+                    ? FluentIcons.heart_24_filled
+                    : FluentIcons.megaphone_24_filled;
 
                 return AnnouncementBox(
-                  message: context.l10n!.newAnnouncement,
+                  message: _message,
                   url: _url,
+                  icon: _icon,
                   onDismiss: () async {
                     announcementURL.value = null;
                   },
