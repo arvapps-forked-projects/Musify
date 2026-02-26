@@ -26,6 +26,8 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:musify/extensions/l10n.dart';
 import 'package:musify/services/settings_manager.dart';
+import 'package:musify/utilities/flutter_bottom_sheet.dart'
+    show closeCurrentBottomSheet;
 import 'package:musify/widgets/mini_player.dart';
 
 class BottomNavigationPage extends StatefulWidget {
@@ -39,6 +41,9 @@ class BottomNavigationPage extends StatefulWidget {
 
 class _BottomNavigationPageState extends State<BottomNavigationPage> {
   bool? _previousOfflineMode;
+
+  /// Track the previously selected tab index to detect double-taps on the same tab.
+  int? _previousTabIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -188,8 +193,20 @@ class _BottomNavigationPageState extends State<BottomNavigationPage> {
   void _onTabTapped(int index, List<_NavigationItem> items) {
     if (index < items.length) {
       final item = items[index];
-      // Use the shell navigation index instead of the route
-      widget.child.goBranch(item.shellIndex);
+      final isReselect = _previousTabIndex == index;
+
+      // Close any open bottom sheet before switching tabs
+      closeCurrentBottomSheet();
+
+      // If user taps the same tab again, reset it to initial state.
+      // Otherwise, preserve the branch state.
+      if (isReselect) {
+        widget.child.goBranch(item.shellIndex, initialLocation: true);
+      } else {
+        widget.child.goBranch(item.shellIndex);
+      }
+
+      _previousTabIndex = index;
     }
   }
 
