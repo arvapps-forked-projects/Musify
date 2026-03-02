@@ -26,12 +26,13 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
-import 'package:musify/API/musify.dart';
 import 'package:musify/extensions/l10n.dart';
 import 'package:musify/main.dart';
+import 'package:musify/services/common_services.dart';
 import 'package:musify/services/data_manager.dart';
 import 'package:musify/services/playlist_download_service.dart';
 import 'package:musify/services/playlist_sharing.dart';
+import 'package:musify/services/playlists_manager.dart';
 import 'package:musify/services/settings_manager.dart';
 import 'package:musify/utilities/common_variables.dart';
 import 'package:musify/utilities/flutter_toast.dart';
@@ -140,7 +141,11 @@ class _PlaylistPageState extends State<PlaylistPage> {
         }
       }
     } catch (e, stackTrace) {
-      logger.log('Error initializing playlist:', e, stackTrace);
+      logger.log(
+        'Error initializing playlist:',
+        error: e,
+        stackTrace: stackTrace,
+      );
       if (mounted) {
         showToast(context, context.l10n!.error);
       }
@@ -332,9 +337,11 @@ class _PlaylistPageState extends State<PlaylistPage> {
                 iconSize: 24,
                 onPressed: () {
                   playlistLikeStatus.value = !playlistLikeStatus.value;
-                  updatePlaylistLikeStatus(
-                    _playlist['ytid'],
-                    playlistLikeStatus.value,
+                  unawaited(
+                    updatePlaylistLikeStatus(
+                      _playlist['ytid'],
+                      playlistLikeStatus.value,
+                    ),
                   );
                   currentLikedPlaylistsLength.value =
                       currentLikedPlaylistsLength.value - 1;
@@ -345,9 +352,11 @@ class _PlaylistPageState extends State<PlaylistPage> {
                 iconSize: 24,
                 onPressed: () {
                   playlistLikeStatus.value = !playlistLikeStatus.value;
-                  updatePlaylistLikeStatus(
-                    _playlist['ytid'],
-                    playlistLikeStatus.value,
+                  unawaited(
+                    updatePlaylistLikeStatus(
+                      _playlist['ytid'],
+                      playlistLikeStatus.value,
+                    ),
                   );
                   currentLikedPlaylistsLength.value =
                       currentLikedPlaylistsLength.value + 1;
@@ -376,10 +385,16 @@ class _PlaylistPageState extends State<PlaylistPage> {
         );
 
         if (result != null) {
-          final index = userCustomPlaylists.value.indexOf(widget.playlistData);
-          if (index != -1) {
+          final playlistYtid = _playlist['ytid'];
+
+          // Search root list first, then inside folders.
+          final rootIndex = userCustomPlaylists.value.indexWhere(
+            (p) => p['ytid'] == playlistYtid,
+          );
+
+          if (rootIndex != -1) {
             final updatedPlaylists = List<Map>.from(userCustomPlaylists.value);
-            updatedPlaylists[index] = result;
+            updatedPlaylists[rootIndex] = result;
             userCustomPlaylists.value = updatedPlaylists;
             unawaited(
               addOrUpdateData(
@@ -388,9 +403,34 @@ class _PlaylistPageState extends State<PlaylistPage> {
                 userCustomPlaylists.value,
               ),
             );
-            setState(() => _playlist = result);
-            showToast(context, context.l10n!.playlistUpdated);
+          } else {
+            // Playlist lives inside a folder - update it there.
+            final updatedFolders = List<Map>.from(userPlaylistFolders.value);
+            for (final folder in updatedFolders) {
+              final folderPlaylists = List<Map>.from(
+                folder['playlists'] as List? ?? [],
+              );
+              final fi = folderPlaylists.indexWhere(
+                (p) => p['ytid'] == playlistYtid,
+              );
+              if (fi != -1) {
+                folderPlaylists[fi] = result;
+                folder['playlists'] = folderPlaylists;
+                break;
+              }
+            }
+            userPlaylistFolders.value = updatedFolders;
+            unawaited(
+              addOrUpdateData(
+                'user',
+                'playlistFolders',
+                userPlaylistFolders.value,
+              ),
+            );
           }
+
+          setState(() => _playlist = result);
+          showToast(context, context.l10n!.playlistUpdated);
         }
       },
     );
@@ -541,13 +581,28 @@ class _PlaylistPageState extends State<PlaylistPage> {
 
   void _handleSyncPlaylist() async {
     if (_playlist['ytid'] != null) {
-      _playlist = await updatePlaylistList(context, _playlist['ytid']);
+      final updated = await updatePlaylistList(context, _playlist['ytid']);
+      if (updated != null && mounted) {
+        setState(() {
+          _playlist = updated;
+          if (_playlist['list'] != null) {
+            _originalPlaylistList = List<dynamic>.from(
+              _playlist['list'] as List,
+            );
+          }
+        });
+      }
       _pagingController.refresh();
     } else {
       final updatedPlaylist = await getPlaylistInfoForWidget(widget.playlistId);
       if (updatedPlaylist != null && mounted) {
         setState(() {
           _playlist = updatedPlaylist;
+          if (_playlist['list'] != null) {
+            _originalPlaylistList = List<dynamic>.from(
+              _playlist['list'] as List,
+            );
+          }
         });
         _pagingController.refresh();
       }
@@ -559,7 +614,8 @@ class _PlaylistPageState extends State<PlaylistPage> {
     if (indexOfRemovedSong >= items.length) return;
 
     final dynamic songToRemove = items[indexOfRemovedSong];
-    final playlistTitle = _playlist['title'];
+    _originalPlaylistList.removeWhere((s) => s['ytid'] == songToRemove['ytid']);
+    final playlistId = _playlist['ytid'];
     if (mounted) {
       showToastWithButton(
         context,
@@ -568,7 +624,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
         () {
           addSongInCustomPlaylist(
             context,
-            playlistTitle,
+            playlistId,
             songToRemove,
             indexToInsert: indexOfRemovedSong,
           );
@@ -578,8 +634,6 @@ class _PlaylistPageState extends State<PlaylistPage> {
     } else {
       logger.log(
         '(_updateSongsListOnRemove): Widget not mounted, cannot show undo toast.',
-        null,
-        null,
       );
     }
 

@@ -22,10 +22,10 @@
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:musify/API/musify.dart';
 import 'package:musify/extensions/l10n.dart';
 import 'package:musify/main.dart';
 import 'package:musify/screens/search_page.dart';
+import 'package:musify/services/common_services.dart';
 import 'package:musify/services/data_manager.dart';
 import 'package:musify/services/router_service.dart';
 import 'package:musify/services/settings_manager.dart';
@@ -327,8 +327,8 @@ class SettingsPage extends StatelessWidget {
               if (context.mounted) {
                 showToast(context, response);
               }
-            } catch (e) {
-              logger.log('Error restoring data', e, null);
+            } catch (e, str) {
+              logger.log('Error restoring data', error: e, stackTrace: str);
               if (context.mounted) {
                 showToast(context, context.l10n!.error);
               }
@@ -772,8 +772,8 @@ class SettingsPage extends StatelessWidget {
       if (context.mounted) {
         showToast(context, response);
       }
-    } catch (e) {
-      logger.log('Error backing up data', e, null);
+    } catch (e, stackTrace) {
+      logger.log('Error backing up data', error: e, stackTrace: stackTrace);
       if (context.mounted) {
         showToast(context, context.l10n!.error);
       }

@@ -21,13 +21,14 @@
 
 import 'dart:io';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:musify/API/musify.dart';
 import 'package:musify/extensions/l10n.dart';
 import 'package:musify/main.dart';
+import 'package:musify/services/common_services.dart';
+import 'package:musify/services/playlists_manager.dart';
 import 'package:musify/utilities/common_variables.dart';
+import 'package:musify/utilities/fallback_image.dart';
 import 'package:musify/utilities/flutter_toast.dart';
 import 'package:musify/utilities/formatter.dart';
 import 'package:musify/widgets/no_artwork_cube.dart';
@@ -79,6 +80,7 @@ class _SongBarState extends State<SongBar> {
   late String _songArtist;
   late final String? _artworkPath;
   late final String _lowResImageUrl;
+  late final String _highResImageUrl;
   late final String _ytid;
 
   @override
@@ -90,6 +92,7 @@ class _SongBarState extends State<SongBar> {
     _songArtist = widget.song['artist']?.toString() ?? '';
     _artworkPath = widget.song['artworkPath'];
     _lowResImageUrl = widget.song['lowResImage']?.toString() ?? '';
+    _highResImageUrl = widget.song['highResImage']?.toString() ?? '';
     _ytid = widget.song['ytid'] ?? '';
 
     // Initialize ValueNotifiers only once
@@ -187,6 +190,7 @@ class _SongBarState extends State<SongBar> {
 
         return _OnlineArtwork(
           lowResImageUrl: _lowResImageUrl,
+          highResImageUrl: _highResImageUrl,
           size: size,
           isDurationAvailable: isDurationAvailable,
           colorScheme: colorScheme,
@@ -240,7 +244,7 @@ class _SongBarState extends State<SongBar> {
             ? likedSongsLength + 1
             : likedSongsLength - 1;
         updateSongLikeStatus(_ytid, newValue).catchError((e) {
-          logger.log('Error updating song like status', e, null);
+          logger.log('Error updating song like status', error: e);
           // Revert on error
           _songLikeStatus.value = !newValue;
           currentLikedSongsLength.value = likedSongsLength;
@@ -264,7 +268,7 @@ class _SongBarState extends State<SongBar> {
         break;
       case 'remove_from_recents':
         removeFromRecentlyPlayed(_ytid).catchError((e) {
-          logger.log('Error removing from recently played', e, null);
+          logger.log('Error removing from recently played', error: e);
         });
         break;
       case 'offline':
@@ -322,7 +326,7 @@ class _SongBarState extends State<SongBar> {
         }
       }
     } catch (e, stackTrace) {
-      logger.log('Error renaming song', e, stackTrace);
+      logger.log('Error renaming song', error: e, stackTrace: stackTrace);
       if (context.mounted) {
         showToast(context, context.l10n!.error);
       }
@@ -354,7 +358,7 @@ class _SongBarState extends State<SongBar> {
     } catch (e) {
       // Revert on error
       _songOfflineStatus.value = originalValue;
-      logger.log('Error toggling offline status', e, null);
+      logger.log('Error toggling offline status', error: e);
       if (context.mounted) {
         showToast(context, context.l10n!.error);
       }
@@ -608,6 +612,7 @@ class _OfflineArtwork extends StatelessWidget {
 class _OnlineArtwork extends StatelessWidget {
   const _OnlineArtwork({
     required this.lowResImageUrl,
+    required this.highResImageUrl,
     required this.size,
     required this.isDurationAvailable,
     required this.colorScheme,
@@ -616,6 +621,7 @@ class _OnlineArtwork extends StatelessWidget {
   });
 
   final String lowResImageUrl;
+  final String highResImageUrl;
   final double size;
   final bool isDurationAvailable;
   final ColorScheme colorScheme;
@@ -632,12 +638,11 @@ class _OnlineArtwork extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: <Widget>[
-          CachedNetworkImage(
-            key: ValueKey(lowResImageUrl),
+          FallbackNetworkImage(
             imageUrl: lowResImageUrl,
+            fallbackUrl: highResImageUrl.isNotEmpty ? highResImageUrl : null,
             width: size,
             height: size,
-            fit: BoxFit.cover,
             memCacheWidth: 256,
             memCacheHeight: 256,
             imageBuilder: (context, imageProvider) => ClipRRect(
@@ -674,8 +679,7 @@ class _OnlineArtwork extends StatelessWidget {
                 ],
               ),
             ),
-            errorWidget: (context, url, error) =>
-                const NullArtworkWidget(iconSize: 30),
+            errorChild: const NullArtworkWidget(iconSize: 30),
           ),
           if (isDurationAvailable && !isOffline)
             Positioned(
@@ -733,7 +737,7 @@ void showAddToPlaylistDialog(BuildContext context, dynamic song) {
                             context,
                             addSongInCustomPlaylist(
                               context,
-                              playlist['title'],
+                              playlist['ytid'],
                               song,
                             ),
                           );

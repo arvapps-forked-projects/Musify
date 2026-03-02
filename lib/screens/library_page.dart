@@ -21,9 +21,11 @@
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:musify/API/musify.dart';
 import 'package:musify/extensions/l10n.dart';
+import 'package:musify/main.dart' show logger;
+import 'package:musify/services/common_services.dart';
 import 'package:musify/services/playlist_download_service.dart';
+import 'package:musify/services/playlists_manager.dart';
 import 'package:musify/services/router_service.dart';
 import 'package:musify/services/settings_manager.dart';
 import 'package:musify/utilities/async_loader.dart';
@@ -130,7 +132,8 @@ class _LibraryPageState extends State<LibraryPage> {
     final isUserPlaylistsEmpty =
         userPlaylistFolders.value.isEmpty &&
         userPlaylists.value.isEmpty &&
-        userCustomPlaylists.value.isEmpty;
+        userCustomPlaylists.value.isEmpty &&
+        offlinePlaylistService.offlinePlaylists.value.isEmpty;
     return Column(
       children: [
         if (!offlineMode.value) ...[
@@ -181,9 +184,7 @@ class _LibraryPageState extends State<LibraryPage> {
               if (folders.isEmpty) {
                 return const SizedBox();
               }
-              final playlistsNotInFolders = getPlaylistsNotInFolders();
-              final hasPlaylistsAfter = playlistsNotInFolders.isNotEmpty;
-              return _buildFolderListView(context, folders, hasPlaylistsAfter);
+              return _buildFolderListView(context, folders, true);
             },
           ),
           ValueListenableBuilder<List>(
@@ -193,7 +194,11 @@ class _LibraryPageState extends State<LibraryPage> {
               if (playlistsNotInFolders.isEmpty) {
                 return const SizedBox();
               }
-              return _buildPlaylistListView(context, playlistsNotInFolders);
+              return _buildPlaylistListView(
+                context,
+                playlistsNotInFolders,
+                hasItemsAfter: true,
+              );
             },
           ),
         ],
@@ -302,15 +307,19 @@ class _LibraryPageState extends State<LibraryPage> {
     BuildContext context,
     List playlists, {
     bool isOfflinePlaylists = false,
+    bool hasItemsAfter = false,
   }) {
     return ListView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: playlists.length,
-      padding: commonListViewBottomPadding,
+      padding: hasItemsAfter ? EdgeInsets.zero : commonListViewBottomPadding,
       itemBuilder: (BuildContext context, index) {
         final playlist = playlists[index];
-        final borderRadius = getItemBorderRadius(index, playlists.length);
+        final isLastItem = index == playlists.length - 1;
+        final borderRadius = hasItemsAfter && isLastItem
+            ? BorderRadius.zero
+            : getItemBorderRadius(index, playlists.length);
         return PlaylistBar(
           key: ValueKey(playlist['ytid']),
           playlist['title'],
@@ -637,13 +646,14 @@ class _LibraryPageState extends State<LibraryPage> {
         onSubmit: () {
           Navigator.of(context).pop();
 
-          if (playlist['ytid'] != null &&
-              playlist['ytid'].toString().startsWith('customId-') &&
-              playlist['source'] == 'user-created') {
-            removeUserCustomPlaylist(playlist);
-          } else {
-            removeUserPlaylist(playlist['ytid']);
+          final playlistId = playlist['ytid']?.toString() ?? '';
+
+          if (playlistId.isEmpty) {
+            logger.log('Playlist ID is missing, cannot remove playlist.');
+            return;
           }
+
+          removeUserPlaylistEntry(playlist);
         },
       );
     },
@@ -702,7 +712,7 @@ class _LibraryPageState extends State<LibraryPage> {
           FilledButton.icon(
             onPressed: () {
               if (folderName.trim().isNotEmpty) {
-                final result = createPlaylistFolder(folderName.trim());
+                final result = createPlaylistFolder(folderName.trim(), context);
                 showToast(context, result);
               } else {
                 showToast(context, context.l10n!.enterFolderName);
@@ -727,8 +737,8 @@ class _LibraryPageState extends State<LibraryPage> {
           Navigator.of(context).pop();
         },
         onSubmit: () {
+          final result = deletePlaylistFolder(folder['id'], context);
           Navigator.of(context).pop();
-          final result = deletePlaylistFolder(folder['id']);
           showToast(context, result);
         },
       );

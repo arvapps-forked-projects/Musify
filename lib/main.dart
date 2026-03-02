@@ -30,7 +30,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:musify/API/musify.dart';
 import 'package:musify/extensions/l10n.dart';
 import 'package:musify/localization/app_localizations.dart';
 import 'package:musify/services/audio_service.dart';
@@ -38,6 +37,7 @@ import 'package:musify/services/data_manager.dart';
 import 'package:musify/services/io_service.dart';
 import 'package:musify/services/logger_service.dart';
 import 'package:musify/services/playlist_sharing.dart';
+import 'package:musify/services/playlists_manager.dart';
 import 'package:musify/services/router_service.dart';
 import 'package:musify/services/settings_manager.dart';
 import 'package:musify/services/update_manager.dart';
@@ -130,12 +130,16 @@ class _MusifyState extends State<Musify> {
           value,
           audioHandler: audioHandler,
           onError: (error, stackTrace) {
-            logger.log('Error while playing shared song:', error, stackTrace);
+            logger.log(
+              'Error while playing shared song:',
+              error: error,
+              stackTrace: stackTrace,
+            );
           },
         );
       },
       onError: (err) {
-        logger.log('getTextStream error:', err, null);
+        logger.log('getTextStream error:', error: err);
       },
     );
 
@@ -147,7 +151,11 @@ class _MusifyState extends State<Musify> {
         yield LicenseEntryWithLineBreaks(['paytoneOne'], license);
       });
     } catch (e, stackTrace) {
-      logger.log('License Registration Error', e, stackTrace);
+      logger.log(
+        'License Registration Error',
+        error: e,
+        stackTrace: stackTrace,
+      );
     }
 
     if (!isFdroidBuild) {
@@ -272,18 +280,18 @@ Future<void> initialisation() async {
       appLinks.uriLinkStream.listen(
         handleIncomingLink,
         onError: (err) {
-          logger.log('URI link error:', err, null);
+          logger.log('URI link error:', error: err);
         },
       );
     } on PlatformException {
-      logger.log('Failed to get initial uri', null, null);
+      logger.log('Failed to get initial uri');
     }
 
     if (isFdroidBuild && !offlineMode.value) {
       await fetchAnnouncementOnly();
     }
   } catch (e, stackTrace) {
-    logger.log('Initialization Error', e, stackTrace);
+    logger.log('Initialization Error', error: e, stackTrace: stackTrace);
   }
 
   applicationDirPath = (await getApplicationDocumentsDirectory()).path;
@@ -303,8 +311,7 @@ void handleIncomingLink(Uri? uri) async {
         if (playlist != null) {
           // Ensure the incoming playlist has a unique id so it can be removed later
           if (playlist['ytid'] == null || playlist['ytid'].toString().isEmpty) {
-            playlist['ytid'] =
-                'customId-${DateTime.now().millisecondsSinceEpoch}';
+            playlist['ytid'] = generateCustomPlaylistId();
           }
           // Check for duplicate by title and song ytids
           final incomingYtids = (playlist['list'] as List<dynamic>)

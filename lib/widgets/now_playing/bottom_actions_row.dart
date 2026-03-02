@@ -22,9 +22,9 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:musify/API/musify.dart';
 import 'package:musify/extensions/l10n.dart';
 import 'package:musify/main.dart';
+import 'package:musify/services/common_services.dart';
 import 'package:musify/services/settings_manager.dart';
 import 'package:musify/utilities/common_variables.dart';
 import 'package:musify/utilities/flutter_bottom_sheet.dart';
@@ -285,7 +285,7 @@ Future<void> _toggleOffline(
     }
   } catch (e) {
     status.value = originalValue;
-    logger.log('Error toggling offline status', e, null);
+    logger.log('Error toggling offline status', error: e);
   }
 }
 

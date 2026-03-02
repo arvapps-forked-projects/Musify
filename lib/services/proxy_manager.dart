@@ -66,6 +66,7 @@ class ProxyManager {
           } catch (_) {}
           _sharedYt = _defaultYt;
         }
+        _sharedProxyAddress = null;
         _closeAllProxyResources();
       }
     });
@@ -104,6 +105,8 @@ class ProxyManager {
 
   final Map<String, _ProxyResources> _proxyResources = {};
 
+  String? _sharedProxyAddress;
+
   Future<void> _fetchProxies() async {
     if (!useProxy.value) return;
     try {
@@ -121,8 +124,12 @@ class ProxyManager {
         _lastFetched = DateTime.now();
         _pruneStaleProxyResources();
       });
-    } catch (e) {
-      logger.log('ProxyManager: Error fetching proxies: $e', null, null);
+    } catch (e, stackTrace) {
+      logger.log(
+        'ProxyManager: Error fetching proxies',
+        error: e,
+        stackTrace: stackTrace,
+      );
     }
   }
 
@@ -155,19 +162,24 @@ class ProxyManager {
             } catch (_) {}
           }
           _sharedYt = ytClient;
+          _sharedProxyAddress = proxy.address;
           _workingProxies.add(proxy);
           break;
-        } catch (e) {
+        } catch (e, stackTrace) {
           logger.log(
             'ProxyManager: failed to init shared proxy client for ${proxy.address}',
-            e,
-            null,
+            error: e,
+            stackTrace: stackTrace,
           );
           continue;
         }
       } while (true);
     } catch (e, stackTrace) {
-      logger.log('Error initializing proxy client', e, stackTrace);
+      logger.log(
+        'Error initializing proxy client',
+        error: e,
+        stackTrace: stackTrace,
+      );
     } finally {
       _initializationCompletion?.complete();
       _initializationCompletion = null;
@@ -206,11 +218,11 @@ class ProxyManager {
           .timeout(Duration(seconds: timeoutSeconds));
       _workingProxies.add(proxy);
       return manifest;
-    } catch (e) {
+    } catch (e, stackTrace) {
       logger.log(
         'ProxyManager: failed to validate proxy ${proxy.address}',
-        e,
-        null,
+        error: e,
+        stackTrace: stackTrace,
       );
       return null;
     } finally {
@@ -240,7 +252,7 @@ class ProxyManager {
   Future<ProxyInfo?> _getRandomProxy({String? preferredCountry}) async {
     if (!useProxy.value) return null;
     try {
-      if (!_hasFetched) await _fetchingProxiesFuture;
+      if (!_hasFetched) await (_fetchingProxiesFuture ?? _fetchProxies());
       if (_hasFetched && _proxiesByCountry.isEmpty) await _fetchProxies();
       if (_proxiesByCountry.isEmpty) return null;
       ProxyInfo proxy;
@@ -269,7 +281,12 @@ class ProxyManager {
         }
       }
       return proxy;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      logger.log(
+        'ProxyManager: Error getting random proxy',
+        error: e,
+        stackTrace: stackTrace,
+      );
       return null;
     }
   }
@@ -295,11 +312,23 @@ class ProxyManager {
     res = _ProxyResources(httpClient, ioClient);
 
     if (_proxyResources.length >= _maxProxyResourcePoolSize) {
-      final oldestKey = _proxyResources.keys.first;
-      final oldest = _proxyResources.remove(oldestKey);
-      try {
-        oldest?.close();
-      } catch (_) {}
+      // Skip the entry that backs _sharedYt to avoid closing its IOClient.
+      final oldestKey = _proxyResources.keys.firstWhere(
+        (k) => k != _sharedProxyAddress,
+        orElse: () => '',
+      );
+      if (oldestKey.isNotEmpty) {
+        final oldest = _proxyResources.remove(oldestKey);
+        try {
+          oldest?.close();
+        } catch (e, stackTrace) {
+          logger.log(
+            'ProxyManager: Error closing proxy resources',
+            error: e,
+            stackTrace: stackTrace,
+          );
+        }
+      }
     }
 
     _proxyResources[key] = res;
@@ -315,14 +344,22 @@ class ProxyManager {
         .toSet();
 
     final staleKeys = _proxyResources.keys
-        .where((key) => !activeAddresses.contains(key))
+        .where(
+          (key) => key != _sharedProxyAddress && !activeAddresses.contains(key),
+        )
         .toList();
 
     for (final key in staleKeys) {
       final stale = _proxyResources.remove(key);
       try {
         stale?.close();
-      } catch (_) {}
+      } catch (e, stackTrace) {
+        logger.log(
+          'ProxyManager: Error closing stale proxy resources',
+          error: e,
+          stackTrace: stackTrace,
+        );
+      }
     }
   }
 
@@ -347,7 +384,10 @@ class ProxyManager {
   Future<StreamManifest?> _tryProxies(String songId) async {
     if (!useProxy.value) return null;
     StreamManifest? manifest;
+    var attempts = 0;
+    const maxAttempts = 5;
     do {
+      if (attempts++ >= maxAttempts) break;
       final proxy = await _getRandomProxy();
       if (proxy == null) break;
       manifest = await _validateProxy(proxy, songId, 5);
@@ -359,9 +399,16 @@ class ProxyManager {
     for (final res in _proxyResources.values) {
       try {
         res.close();
-      } catch (_) {}
+      } catch (e, stackTrace) {
+        logger.log(
+          'ProxyManager: Error closing proxy resources',
+          error: e,
+          stackTrace: stackTrace,
+        );
+      }
     }
     _proxyResources.clear();
+    _sharedProxyAddress = null;
   }
 
   /// Try to create a [YoutubeExplode] client that routes requests through a
@@ -395,11 +442,11 @@ class ProxyManager {
 
         _workingProxies.add(proxy);
         return ytClient;
-      } catch (e) {
+      } catch (e, stackTrace) {
         logger.log(
           'ProxyManager: failed to create proxy youtube client for ${proxy.address}',
-          e,
-          null,
+          error: e,
+          stackTrace: stackTrace,
         );
         continue;
       }
@@ -456,8 +503,7 @@ class ProxyManager {
   void _logProxyFetchError(String source, dynamic error) {
     logger.log(
       'ProxyManager: Error fetching proxies from $source: $error',
-      error,
-      null,
+      error: error,
     );
   }
 
@@ -477,7 +523,8 @@ class ProxyManager {
       Map<String, dynamic> result;
       try {
         result = jsonDecode(response.body);
-      } catch (_) {
+      } catch (e) {
+        _logProxyFetchError('proxyscrape.com', e);
         return; // Invalid JSON
       }
 
@@ -582,3 +629,5 @@ class ProxyManager {
     }
   }
 }
+
+final ytClient = ProxyManager().getClientSync();
