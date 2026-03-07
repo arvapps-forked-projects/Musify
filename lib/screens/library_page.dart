@@ -19,6 +19,8 @@
  *     please visit: https://github.com/gokadzev/Musify
  */
 
+import 'dart:async';
+
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:musify/extensions/l10n.dart';
@@ -31,6 +33,7 @@ import 'package:musify/services/settings_manager.dart';
 import 'package:musify/utilities/async_loader.dart';
 import 'package:musify/utilities/common_variables.dart';
 import 'package:musify/utilities/flutter_toast.dart';
+import 'package:musify/utilities/offline_playlist_dialogs.dart';
 import 'package:musify/utilities/playlist_image_picker.dart';
 import 'package:musify/utilities/utils.dart';
 import 'package:musify/widgets/confirmation_dialog.dart';
@@ -335,7 +338,9 @@ class _LibraryPageState extends State<LibraryPage> {
           onDelete:
               playlist['source'] == 'user-created' ||
                   playlist['source'] == 'user-youtube'
-              ? () => _showRemovePlaylistDialog(playlist)
+              ? () => isOfflinePlaylists
+                    ? _showRemoveOfflinePlaylistDialog(playlist)
+                    : _showRemovePlaylistDialog(playlist)
               : null,
           borderRadius: borderRadius,
         );
@@ -634,6 +639,12 @@ class _LibraryPageState extends State<LibraryPage> {
     },
   );
 
+  void _showRemoveOfflinePlaylistDialog(Map playlist) {
+    final playlistId = playlist['ytid']?.toString() ?? '';
+    if (playlistId.isEmpty) return;
+    showRemoveOfflinePlaylistDialog(context, playlistId);
+  }
+
   void _showRemovePlaylistDialog(Map playlist) => showDialog(
     context: context,
     builder: (BuildContext context) {
@@ -650,10 +661,14 @@ class _LibraryPageState extends State<LibraryPage> {
 
           if (playlistId.isEmpty) {
             logger.log('Playlist ID is missing, cannot remove playlist.');
+            showToast(context, context.l10n!.error);
             return;
           }
 
           removeUserPlaylistEntry(playlist);
+          if (offlinePlaylistService.isPlaylistDownloaded(playlistId)) {
+            unawaited(offlinePlaylistService.removeOfflinePlaylist(playlistId));
+          }
         },
       );
     },
