@@ -41,7 +41,9 @@ import 'package:musify/utilities/sort_utils.dart';
 import 'package:musify/utilities/utils.dart';
 import 'package:musify/widgets/edit_playlist_dialog.dart';
 import 'package:musify/widgets/playlist_cube.dart';
-import 'package:musify/widgets/playlist_header.dart';
+import 'package:musify/widgets/playlist_page/playlist_header.dart';
+import 'package:musify/widgets/playlist_page/playlist_search_bar.dart';
+import 'package:musify/widgets/playlist_page/shuffle_play_button.dart';
 import 'package:musify/widgets/song_bar.dart';
 import 'package:musify/widgets/sort_chips.dart';
 import 'package:musify/widgets/spinner.dart';
@@ -85,20 +87,30 @@ class _PlaylistPageState extends State<PlaylistPage> {
     orElse: () => PlaylistSortType.default_,
   );
 
+  // Search
+  String _searchQuery = '';
+
+  List<dynamic> get _sourceList {
+    final list = _playlist?['list'] as List<dynamic>? ?? [];
+    if (_searchQuery.isEmpty) return list;
+    final q = _searchQuery.toLowerCase();
+    return list.where((s) {
+      final title = (s['title'] ?? '').toString().toLowerCase();
+      final artist = (s['artist'] ?? '').toString().toLowerCase();
+      return title.contains(q) || artist.contains(q);
+    }).toList();
+  }
+
   @override
   void initState() {
     super.initState();
 
     _pagingController = PagingController<int, dynamic>(
       getNextPageKey: (state) {
-        if (_playlist == null || _playlist['list'] == null) return null;
-
-        final playlistList = _playlist['list'] as List<dynamic>;
-        final totalCount = playlistList.length;
+        final source = _sourceList;
+        final totalCount = source.length;
         final currentlyLoaded = state.items?.length ?? 0;
-
         if (currentlyLoaded >= totalCount) return null;
-
         return currentlyLoaded;
       },
       fetchPage: _fetchPage,
@@ -157,16 +169,10 @@ class _PlaylistPageState extends State<PlaylistPage> {
 
   Future<List<dynamic>> _fetchPage(int pageKey) async {
     try {
-      if (_playlist == null || _playlist['list'] == null) {
-        return [];
-      }
-
-      final playlistList = _playlist['list'] as List<dynamic>;
-      final totalCount = playlistList.length;
+      final source = _sourceList;
       final startIndex = pageKey;
-      final endIndex = min(startIndex + _itemsPerPage, totalCount);
-
-      return playlistList.sublist(startIndex, endIndex);
+      final endIndex = min(startIndex + _itemsPerPage, source.length);
+      return source.sublist(startIndex, endIndex);
     } catch (error) {
       rethrow;
     }
@@ -235,14 +241,26 @@ class _PlaylistPageState extends State<PlaylistPage> {
     return Column(
       children: [
         PlaylistHeader(_buildPlaylistImage(), _playlist['title'], songsLength),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Wrap(
           alignment: WrapAlignment.center,
           spacing: 8,
           runSpacing: 8,
           children: [
-            if (songsLength > 0) _buildPlayButton(primaryColor),
-            if (songsLength > 0) _buildShufflePlayButton(primaryColor),
+            if (songsLength > 0)
+              IconButton.filled(
+                icon: Icon(
+                  FluentIcons.play_24_filled,
+                  color: colorScheme.onPrimary,
+                ),
+                iconSize: 24,
+                onPressed: () => audioHandler.playPlaylistSong(
+                  playlist: _playlist,
+                  songIndex: 0,
+                ),
+              ),
+            if (songsLength > 0)
+              ShufflePlayButton(songs: _playlist['list'] as List? ?? []),
             if (widget.playlistId != null && !isUserCreated)
               _buildLikeButton(primaryColor),
             _buildSyncButton(primaryColor),
@@ -254,7 +272,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
           ],
         ),
         if (songsLength > 1) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           SortChips<PlaylistSortType>(
             currentSortType: _sortType,
             sortTypes: PlaylistSortType.values,
@@ -269,43 +287,22 @@ class _PlaylistPageState extends State<PlaylistPage> {
             },
           ),
         ],
-        const SizedBox(height: 8),
+        if (songsLength > 0) ...[
+          const SizedBox(height: 16),
+          PlaylistSearchBar(
+            query: _searchQuery,
+            onChanged: (value) {
+              setState(() => _searchQuery = value);
+              _pagingController.refresh();
+            },
+            onCleared: () {
+              setState(() => _searchQuery = '');
+              _pagingController.refresh();
+            },
+          ),
+        ],
+        const SizedBox(height: 16),
       ],
-    );
-  }
-
-  Widget _buildPlayButton(Color primaryColor) {
-    return IconButton.filled(
-      icon: Icon(
-        FluentIcons.play_24_filled,
-        color: Theme.of(context).colorScheme.onPrimary,
-      ),
-      iconSize: 24,
-      onPressed: () =>
-          audioHandler.playPlaylistSong(playlist: _playlist, songIndex: 0),
-    );
-  }
-
-  Widget _buildShufflePlayButton(Color primaryColor) {
-    return IconButton.filledTonal(
-      icon: Icon(FluentIcons.arrow_shuffle_24_filled, color: primaryColor),
-      iconSize: 24,
-      tooltip: 'Shuffle play',
-      onPressed: () async {
-        final playlistSongs = _playlist['list'] as List<dynamic>?;
-        if (playlistSongs == null || playlistSongs.isEmpty) return;
-
-        final shuffledSongs = List<Map>.from(playlistSongs.whereType<Map>());
-        if (shuffledSongs.isEmpty) return;
-
-        shuffledSongs.shuffle();
-
-        await audioHandler.addPlaylistToQueue(
-          shuffledSongs,
-          replace: true,
-          startIndex: 0,
-        );
-      },
     );
   }
 
@@ -642,11 +639,15 @@ class _PlaylistPageState extends State<PlaylistPage> {
     final borderRadius = getItemBorderRadius(index, totalItems);
     final isUserCreatedPlaylist = _playlist?['source'] == 'user-created';
     final playlistId = isUserCreatedPlaylist ? _playlist!['ytid'] : null;
+    final isSearching = _searchQuery.isNotEmpty;
+    final playlistForQueue = isSearching
+        ? {..._playlist as Map, 'list': _sourceList}
+        : _playlist;
 
     return SongBar(
       song,
       true,
-      onRemove: isRemovable
+      onRemove: (isRemovable && !isSearching)
           ? () {
               if (removeSongFromPlaylist(
                 _playlist,
@@ -658,7 +659,10 @@ class _PlaylistPageState extends State<PlaylistPage> {
             }
           : null,
       onPlay: () {
-        audioHandler.playPlaylistSong(playlist: _playlist, songIndex: index);
+        audioHandler.playPlaylistSong(
+          playlist: playlistForQueue,
+          songIndex: index,
+        );
       },
       borderRadius: borderRadius,
       playlistId: playlistId,

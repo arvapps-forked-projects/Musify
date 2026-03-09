@@ -19,6 +19,7 @@
  *     please visit: https://github.com/gokadzev/Musify
  */
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -176,23 +177,29 @@ class _SongBarState extends State<SongBar> {
         widget.showMusicDuration && widget.song['duration'] != null;
 
     return ValueListenableBuilder<bool>(
-      valueListenable: _songOfflineStatus,
-      builder: (_, isOffline, __) {
-        if (isOffline && _artworkPath != null) {
-          return _OfflineArtwork(
-            artworkPath: _artworkPath,
-            size: size,
-            colorScheme: colorScheme,
-          );
-        }
+      valueListenable: _songLikeStatus,
+      builder: (_, isLiked, __) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: _songOfflineStatus,
+          builder: (_, isOffline, __) {
+            if (isOffline && _artworkPath != null) {
+              return _OfflineArtwork(
+                artworkPath: _artworkPath,
+                size: size,
+                colorScheme: colorScheme,
+              );
+            }
 
-        return _OnlineArtwork(
-          lowResImageUrl: _lowResImageUrl,
-          size: size,
-          isDurationAvailable: isDurationAvailable,
-          colorScheme: colorScheme,
-          duration: widget.song['duration'],
-          isOffline: isOffline,
+            return _OnlineArtwork(
+              lowResImageUrl: _lowResImageUrl,
+              size: size,
+              isDurationAvailable: isDurationAvailable,
+              colorScheme: colorScheme,
+              duration: widget.song['duration'],
+              isOffline: isOffline,
+              isLiked: isLiked,
+            );
+          },
         );
       },
     );
@@ -269,7 +276,7 @@ class _SongBarState extends State<SongBar> {
         });
         break;
       case 'offline':
-        _handleOfflineToggle(context);
+        unawaited(_handleOfflineToggle(context));
         break;
     }
   }
@@ -295,16 +302,14 @@ class _SongBarState extends State<SongBar> {
     try {
       if (widget.isFromLikedSongs) {
         await renameSongInLikedSongs(_ytid, newTitle, newArtist);
-        // Update local cached values
         widget.song['title'] = newTitle;
         widget.song['artist'] = newArtist;
         if (context.mounted) {
+          setState(() {
+            _songTitle = newTitle;
+            _songArtist = newArtist;
+          });
           showToast(context, context.l10n!.settingChangedMsg);
-          // Force rebuild by triggering value change
-          // Temporarily change the value to force ValueListenableBuilder to rebuild
-          final oldValue = currentLikedSongsLength.value;
-          currentLikedSongsLength.value = oldValue + 1;
-          currentLikedSongsLength.value = oldValue;
         }
       } else if (widget.playlistId != null) {
         await renameSongInPlaylist(
@@ -313,12 +318,14 @@ class _SongBarState extends State<SongBar> {
           newTitle,
           newArtist,
         );
-        // Update local cached values
         widget.song['title'] = newTitle;
         widget.song['artist'] = newArtist;
         if (context.mounted) {
+          setState(() {
+            _songTitle = newTitle;
+            _songArtist = newArtist;
+          });
           showToast(context, context.l10n!.settingChangedMsg);
-          // Trigger parent page rebuild for custom playlists
           widget.onRenamed?.call();
         }
       }
@@ -330,7 +337,7 @@ class _SongBarState extends State<SongBar> {
     }
   }
 
-  void _handleOfflineToggle(BuildContext context) async {
+  Future<void> _handleOfflineToggle(BuildContext context) async {
     final originalValue = _songOfflineStatus.value;
     _songOfflineStatus.value = !originalValue;
 
@@ -614,6 +621,7 @@ class _OnlineArtwork extends StatelessWidget {
     required this.colorScheme,
     required this.duration,
     required this.isOffline,
+    required this.isLiked,
   });
 
   final String lowResImageUrl;
@@ -622,6 +630,7 @@ class _OnlineArtwork extends StatelessWidget {
   final ColorScheme colorScheme;
   final dynamic duration;
   final bool isOffline;
+  final bool isLiked;
 
   @override
   Widget build(BuildContext context) {
@@ -669,6 +678,24 @@ class _OnlineArtwork extends StatelessWidget {
                           FluentIcons.cellular_off_24_filled,
                           size: 12,
                           color: colorScheme.onSecondaryContainer,
+                        ),
+                      ),
+                    )
+                  else if (isLiked)
+                    Positioned(
+                      top: 2,
+                      right: 4,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          FluentIcons.heart_24_filled,
+                          size: 12,
+                          color: colorScheme.onPrimaryContainer,
                         ),
                       ),
                     ),

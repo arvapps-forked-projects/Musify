@@ -26,11 +26,10 @@ import 'package:musify/extensions/l10n.dart';
 import 'package:musify/main.dart';
 import 'package:musify/services/common_services.dart';
 import 'package:musify/services/settings_manager.dart';
-import 'package:musify/utilities/common_variables.dart';
 import 'package:musify/utilities/flutter_bottom_sheet.dart';
 import 'package:musify/utilities/flutter_toast.dart';
 import 'package:musify/utilities/mediaitem.dart';
-import 'package:musify/utilities/utils.dart';
+import 'package:musify/widgets/queue_list_view.dart';
 import 'package:musify/widgets/song_bar.dart';
 
 class BottomActionsRow extends StatelessWidget {
@@ -58,7 +57,6 @@ class BottomActionsRow extends StatelessWidget {
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final responsiveIconSize = screenWidth < 360 ? iconSize * 0.85 : iconSize;
-    final spacing = screenWidth < 360 ? 6.0 : 10.0;
 
     return StreamBuilder<List<Map>>(
       stream: audioHandler.queueAsMapStream,
@@ -101,8 +99,10 @@ class BottomActionsRow extends StatelessWidget {
               icon: FluentIcons.apps_list_24_filled,
               colorScheme: colorScheme,
               size: responsiveIconSize,
-              onPressed: () =>
-                  _showQueue(context, queue, audioHandler.currentQueueIndex),
+              onPressed: () => showCustomBottomSheet(
+                context,
+                const QueueWidget(isBottomSheet: true),
+              ),
               tooltip: 'Queue',
             ),
           );
@@ -136,27 +136,15 @@ class BottomActionsRow extends StatelessWidget {
           ]);
         }
 
-        final childrenWithSpacing = <Widget>[];
-        for (var i = 0; i < actions.length; i++) {
-          childrenWithSpacing.add(actions[i]);
-          if (i != actions.length - 1) {
-            childrenWithSpacing.add(SizedBox(width: spacing));
-          }
-        }
-
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(20),
           ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: childrenWithSpacing,
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: actions,
           ),
         );
       },
@@ -190,6 +178,7 @@ class BottomActionsRow extends StatelessWidget {
             backgroundColor: isActive
                 ? (activeColor ?? colorScheme.primary).withValues(alpha: 0.15)
                 : Colors.transparent,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -213,6 +202,7 @@ class BottomActionsRow extends StatelessWidget {
       iconSize: size,
       tooltip: tooltip,
       style: IconButton.styleFrom(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       onPressed: onPressed,
@@ -243,6 +233,7 @@ class BottomActionsRow extends StatelessWidget {
             backgroundColor: isActive
                 ? colorScheme.primary.withValues(alpha: 0.15)
                 : Colors.transparent,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -288,106 +279,6 @@ Future<void> _toggleOffline(
     status.value = originalValue;
     logger.log('Error toggling offline status', error: e);
   }
-}
-
-void _showQueue(BuildContext context, List<Map> queue, int currentIndex) {
-  final colorScheme = Theme.of(context).colorScheme;
-
-  showCustomBottomSheet(
-    context,
-    Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.only(left: 10, right: 8, bottom: 12),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  FluentIcons.apps_list_24_filled,
-                  color: colorScheme.onPrimaryContainer,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n!.queue,
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '${queue.length} ${context.l10n!.songs}',
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: () {
-                  audioHandler.clearQueue();
-                  Navigator.pop(context);
-                },
-                icon: const Icon(FluentIcons.dismiss_24_regular, size: 18),
-                label: Text(context.l10n!.clear),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Queue list
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const BouncingScrollPhysics(),
-          padding: commonListViewBottomPadding,
-          itemCount: queue.length,
-          itemBuilder: (BuildContext context, int index) {
-            final isCurrentSong = index == currentIndex;
-            final borderRadius = getItemBorderRadius(index, queue.length);
-
-            return SongBar(
-              queue[index],
-              false,
-              showQueueActions: false,
-              onPlay: () {
-                audioHandler.skipToSong(index);
-                Navigator.pop(context);
-              },
-              onRemove: () {
-                audioHandler.removeFromQueue(index);
-                Navigator.pop(context);
-              },
-              backgroundColor: isCurrentSong
-                  ? colorScheme.primaryContainer.withValues(alpha: 0.3)
-                  : colorScheme.surfaceContainerHigh,
-              borderRadius: borderRadius,
-            );
-          },
-        ),
-      ],
-    ),
-  );
 }
 
 void _showSleepTimerDialog(BuildContext context) {
