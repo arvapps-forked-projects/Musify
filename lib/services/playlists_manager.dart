@@ -28,7 +28,9 @@ import 'package:musify/database/albums.db.dart';
 import 'package:musify/database/playlists.db.dart';
 import 'package:musify/extensions/l10n.dart';
 import 'package:musify/main.dart' show logger;
+import 'package:musify/services/common_services.dart';
 import 'package:musify/services/data_manager.dart';
+import 'package:musify/services/playlist_download_service.dart';
 import 'package:musify/services/proxy_manager.dart';
 import 'package:musify/services/settings_manager.dart';
 import 'package:musify/utilities/flutter_toast.dart';
@@ -173,7 +175,59 @@ String addSongInCustomPlaylist(
     unawaited(
       addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
     );
+    if (offlinePlaylistService.isPlaylistDownloaded(playlistId)) {
+      unawaited(makeSongOffline(song));
+    }
     return context.l10n!.songAdded;
+  } else {
+    logger.log('Custom playlist not found for ytid: $playlistId');
+    return context.l10n!.error;
+  }
+}
+
+String addSongsInCustomPlaylist(
+  BuildContext context,
+  String playlistId,
+  List<dynamic> songs,
+) {
+  Map? customPlaylist;
+  for (final playlist in userCustomPlaylists.value) {
+    if (playlist['ytid'] == playlistId) {
+      customPlaylist = playlist as Map;
+      break;
+    }
+  }
+
+  if (customPlaylist != null) {
+    final List<dynamic> playlistSongs = customPlaylist['list'];
+    var addedCount = 0;
+
+    final isOffline = offlinePlaylistService.isPlaylistDownloaded(playlistId);
+    final newSongs = <dynamic>[];
+    for (final song in songs) {
+      final alreadyExists = playlistSongs.any(
+        (playlistElement) => playlistElement['ytid'] == song['ytid'],
+      );
+      if (!alreadyExists) {
+        playlistSongs.add(song);
+        newSongs.add(song);
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0) {
+      unawaited(
+        addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
+      );
+      if (isOffline) {
+        for (final song in newSongs) {
+          unawaited(makeSongOffline(song));
+        }
+      }
+      return context.l10n!.addedSuccess;
+    } else {
+      return context.l10n!.songAlreadyInPlaylist;
+    }
   } else {
     logger.log('Custom playlist not found for ytid: $playlistId');
     return context.l10n!.error;
