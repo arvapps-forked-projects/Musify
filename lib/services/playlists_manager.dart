@@ -33,9 +33,9 @@ import 'package:musify/services/data_manager.dart';
 import 'package:musify/services/playlist_download_service.dart';
 import 'package:musify/services/proxy_manager.dart';
 import 'package:musify/services/settings_manager.dart';
+import 'package:musify/utilities/app_utils.dart';
 import 'package:musify/utilities/flutter_toast.dart';
 import 'package:musify/utilities/formatter.dart';
-import 'package:musify/utilities/utils.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 List playlists = [...playlistsDB, ...albumsDB];
@@ -152,10 +152,26 @@ String addSongInCustomPlaylist(
   int? indexToInsert,
 }) {
   Map? customPlaylist;
+  var isFromFolder = false;
+
   for (final playlist in userCustomPlaylists.value) {
     if (playlist['ytid'] == playlistId) {
       customPlaylist = playlist as Map;
       break;
+    }
+  }
+
+  if (customPlaylist == null) {
+    for (final folder in userPlaylistFolders.value) {
+      final folderPlaylists = folder['playlists'] as List<dynamic>? ?? [];
+      for (final playlist in folderPlaylists) {
+        if (playlist['ytid'] == playlistId) {
+          customPlaylist = playlist as Map;
+          isFromFolder = true;
+          break;
+        }
+      }
+      if (customPlaylist != null) break;
     }
   }
 
@@ -172,9 +188,16 @@ String addSongInCustomPlaylist(
     } else {
       playlistSongs.add(song);
     }
-    unawaited(
-      addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
-    );
+    if (isFromFolder) {
+      unawaited(
+        addOrUpdateData('user', 'playlistFolders', userPlaylistFolders.value),
+      );
+    } else {
+      unawaited(
+        addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
+      );
+    }
+
     if (offlinePlaylistService.isPlaylistDownloaded(playlistId)) {
       unawaited(makeSongOffline(song));
     }
@@ -185,16 +208,44 @@ String addSongInCustomPlaylist(
   }
 }
 
+List<Map> getUserCustomPlaylists() {
+  return [
+    ...userCustomPlaylists.value
+        .where((p) => p['source'] == 'user-created')
+        .cast<Map>(),
+    for (final folder in userPlaylistFolders.value)
+      ...(folder['playlists'] as List<dynamic>? ?? [])
+          .where((p) => p['source'] == 'user-created')
+          .cast<Map>(),
+  ];
+}
+
 String addSongsInCustomPlaylist(
   BuildContext context,
   String playlistId,
   List<dynamic> songs,
 ) {
   Map? customPlaylist;
+  var isFromFolder = false;
+
   for (final playlist in userCustomPlaylists.value) {
     if (playlist['ytid'] == playlistId) {
       customPlaylist = playlist as Map;
       break;
+    }
+  }
+
+  if (customPlaylist == null) {
+    for (final folder in userPlaylistFolders.value) {
+      final folderPlaylists = folder['playlists'] as List<dynamic>? ?? [];
+      for (final playlist in folderPlaylists) {
+        if (playlist['ytid'] == playlistId) {
+          customPlaylist = playlist as Map;
+          isFromFolder = true;
+          break;
+        }
+      }
+      if (customPlaylist != null) break;
     }
   }
 
@@ -216,9 +267,15 @@ String addSongsInCustomPlaylist(
     }
 
     if (addedCount > 0) {
-      unawaited(
-        addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
-      );
+      if (isFromFolder) {
+        unawaited(
+          addOrUpdateData('user', 'playlistFolders', userPlaylistFolders.value),
+        );
+      } else {
+        unawaited(
+          addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
+        );
+      }
       if (isOffline) {
         for (final song in newSongs) {
           unawaited(makeSongOffline(song));
@@ -258,9 +315,34 @@ bool removeSongFromPlaylist(
 
     try {
       if (playlist['source'] == 'user-created') {
-        unawaited(
-          addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
-        );
+        final playlistId = playlist['ytid']?.toString();
+        final isInFolder =
+            playlistId != null &&
+            userPlaylistFolders.value.any((folder) {
+              final folderPlaylists =
+                  folder['playlists'] as List<dynamic>? ?? [];
+              return folderPlaylists.any(
+                (p) => p['ytid']?.toString() == playlistId,
+              );
+            });
+
+        if (isInFolder) {
+          unawaited(
+            addOrUpdateData(
+              'user',
+              'playlistFolders',
+              userPlaylistFolders.value,
+            ),
+          );
+        } else {
+          unawaited(
+            addOrUpdateData(
+              'user',
+              'customPlaylists',
+              userCustomPlaylists.value,
+            ),
+          );
+        }
       } else {
         unawaited(addOrUpdateData('user', 'playlists', userPlaylists.value));
       }
@@ -423,6 +505,41 @@ String createPlaylistFolder(String folderName, [BuildContext? context]) {
     addOrUpdateData('user', 'playlistFolders', userPlaylistFolders.value),
   );
   return context?.l10n?.addedSuccess ?? 'Added successfully';
+}
+
+String renamePlaylistFolder(
+  String folderId,
+  String newName, [
+  BuildContext? context,
+]) {
+  if (newName.trim().isEmpty) {
+    return context?.l10n?.enterFolderName ?? 'Please enter a folder name';
+  }
+
+  final updatedFolders = List<Map>.from(userPlaylistFolders.value);
+  final folderIndex = updatedFolders.indexWhere((f) => f['id'] == folderId);
+
+  if (folderIndex == -1) {
+    return context?.l10n?.error ?? 'Error';
+  }
+
+  final exists = updatedFolders.any(
+    (folder) =>
+        folder['id'] != folderId &&
+        folder['name'].toString().toLowerCase() == newName.trim().toLowerCase(),
+  );
+
+  if (exists) {
+    return context?.l10n?.folderAlreadyExists ?? 'Folder already exists';
+  }
+
+  updatedFolders[folderIndex]['name'] = newName.trim();
+  userPlaylistFolders.value = updatedFolders;
+
+  unawaited(
+    addOrUpdateData('user', 'playlistFolders', userPlaylistFolders.value),
+  );
+  return context?.l10n?.folderUpdated ?? 'Folder updated successfully';
 }
 
 String movePlaylistToFolder(

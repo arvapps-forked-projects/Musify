@@ -21,18 +21,17 @@
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:musify/constants/common_variables.dart';
+import 'package:musify/constants/app_constants.dart';
 import 'package:musify/extensions/l10n.dart';
 import 'package:musify/main.dart';
 import 'package:musify/services/common_services.dart';
 import 'package:musify/services/data_manager.dart';
 import 'package:musify/services/settings_manager.dart';
+import 'package:musify/utilities/app_utils.dart';
 import 'package:musify/utilities/flutter_toast.dart';
-import 'package:musify/utilities/utils.dart';
 import 'package:musify/widgets/playlist_cube.dart';
 import 'package:musify/widgets/playlist_page/playlist_header.dart';
 import 'package:musify/widgets/playlist_page/playlist_search_bar.dart';
-
 import 'package:musify/widgets/song_bar.dart';
 import 'package:musify/widgets/sort_chips.dart';
 
@@ -83,7 +82,7 @@ class _UserSongsPageState extends State<UserSongsPage> {
       appBar: AppBar(
         title: offlineMode.value ? Text(title) : null,
         actions: [
-          if (isLikedSongs)
+          if (isLikedSongs && songsList.isNotEmpty)
             IconButton(
               onPressed: _toggleEditMode,
               icon: Icon(
@@ -372,9 +371,37 @@ class _UserSongsPageState extends State<UserSongsPage> {
         };
 
         if (displayList.isEmpty) {
-          return const SliverFillRemaining(
+          final emptyIcon = isLikedSongs
+              ? FluentIcons.heart_24_regular
+              : FluentIcons.music_note_1_24_regular;
+          return SliverFillRemaining(
             hasScrollBody: false,
-            child: SizedBox.expand(),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      emptyIcon,
+                      size: 64,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withAlpha(120),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      context.l10n!.playlistEmpty,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           );
         }
 

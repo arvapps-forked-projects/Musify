@@ -23,7 +23,7 @@ import 'dart:async';
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
-import 'package:musify/constants/common_variables.dart';
+import 'package:musify/constants/app_constants.dart';
 import 'package:musify/extensions/l10n.dart';
 import 'package:musify/main.dart' show logger;
 import 'package:musify/services/common_services.dart';
@@ -31,11 +31,11 @@ import 'package:musify/services/playlist_download_service.dart';
 import 'package:musify/services/playlists_manager.dart';
 import 'package:musify/services/router_service.dart';
 import 'package:musify/services/settings_manager.dart';
+import 'package:musify/utilities/app_utils.dart';
 import 'package:musify/utilities/async_loader.dart';
 import 'package:musify/utilities/flutter_toast.dart';
 import 'package:musify/utilities/offline_playlist_dialogs.dart';
 import 'package:musify/utilities/playlist_dialogs.dart';
-import 'package:musify/utilities/utils.dart';
 import 'package:musify/widgets/confirmation_dialog.dart';
 import 'package:musify/widgets/playlist_bar.dart';
 import 'package:musify/widgets/section_header.dart';
@@ -179,34 +179,44 @@ class _LibraryPageState extends State<LibraryPage> {
           ValueListenableBuilder<List>(
             valueListenable: userPlaylistFolders,
             builder: (context, folders, _) {
-              if (folders.isEmpty) {
-                return const SizedBox();
-              }
-              return _buildFolderListView(context, folders, true);
-            },
-          ),
-          ValueListenableBuilder<List>(
-            valueListenable: userCustomPlaylists,
-            builder: (context, playlists, _) {
-              final playlistsNotInFolders = getPlaylistsNotInFolders();
-              if (playlistsNotInFolders.isEmpty) {
-                return const SizedBox();
-              }
-              return _buildPlaylistListView(
-                context,
-                playlistsNotInFolders,
-                hasItemsAfter: true,
-                hasItemsBefore: true,
+              return ValueListenableBuilder<List>(
+                valueListenable: userCustomPlaylists,
+                builder: (context, _, __) {
+                  final playlistsNotInFolders = getPlaylistsNotInFolders();
+                  final hasFolders = folders.isNotEmpty;
+                  final hasCustomPlaylists = playlistsNotInFolders.isNotEmpty;
+                  final hasAnythingAfterOffline =
+                      hasFolders || hasCustomPlaylists;
+                  return Column(
+                    children: [
+                      PlaylistBar(
+                        context.l10n!.offlineSongs,
+                        onPressed: () => NavigationManager.router.go(
+                          '/library/userSongs/offline',
+                        ),
+                        cubeIcon: FluentIcons.cloud_off_24_filled,
+                        borderRadius: hasAnythingAfterOffline
+                            ? BorderRadius.zero
+                            : commonCustomBarRadiusLast,
+                        showBuildActions: false,
+                      ),
+                      if (hasFolders)
+                        _buildFolderListView(
+                          context,
+                          folders,
+                          hasCustomPlaylists,
+                        ),
+                      if (hasCustomPlaylists)
+                        _buildPlaylistListView(
+                          context,
+                          playlistsNotInFolders,
+                          hasItemsBefore: true,
+                        ),
+                    ],
+                  );
+                },
               );
             },
-          ),
-          PlaylistBar(
-            context.l10n!.offlineSongs,
-            onPressed: () =>
-                NavigationManager.router.go('/library/userSongs/offline'),
-            cubeIcon: FluentIcons.cloud_off_24_filled,
-            borderRadius: commonCustomBarRadiusLast,
-            showBuildActions: false,
           ),
         ],
 
