@@ -326,7 +326,8 @@ class _LibraryPageState extends State<LibraryPage> {
         final playlist = playlists[index];
         final isLastItem = index == playlists.length - 1;
         final borderRadius =
-            (hasItemsBefore && index == 0) || (hasItemsAfter && isLastItem)
+            (hasItemsBefore && index == 0 && !isLastItem) ||
+                (hasItemsAfter && isLastItem)
             ? BorderRadius.zero
             : getItemBorderRadius(index, playlists.length);
         return PlaylistBar(
@@ -343,7 +344,8 @@ class _LibraryPageState extends State<LibraryPage> {
               : null,
           onDelete:
               playlist['source'] == 'user-created' ||
-                  playlist['source'] == 'user-youtube'
+                  playlist['source'] == 'user-youtube' ||
+                  isOfflinePlaylists
               ? () => isOfflinePlaylists
                     ? _showRemoveOfflinePlaylistDialog(playlist)
                     : _showRemovePlaylistDialog(playlist)
@@ -425,10 +427,18 @@ class _LibraryPageState extends State<LibraryPage> {
         backgroundColor: colorScheme.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        icon: Icon(
-          FluentIcons.folder_add_24_regular,
-          color: colorScheme.primary,
-          size: 32,
+        icon: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            FluentIcons.folder_add_24_filled,
+            color: colorScheme.primary,
+            size: 32,
+          ),
         ),
         title: Text(
           context.l10n!.createFolder,

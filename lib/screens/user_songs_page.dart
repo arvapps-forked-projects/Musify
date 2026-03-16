@@ -29,9 +29,10 @@ import 'package:musify/services/data_manager.dart';
 import 'package:musify/services/settings_manager.dart';
 import 'package:musify/utilities/app_utils.dart';
 import 'package:musify/utilities/flutter_toast.dart';
+import 'package:musify/widgets/confirmation_dialog.dart';
+import 'package:musify/widgets/custom_search_bar.dart';
 import 'package:musify/widgets/playlist_cube.dart';
 import 'package:musify/widgets/playlist_page/playlist_header.dart';
-import 'package:musify/widgets/playlist_page/playlist_search_bar.dart';
 import 'package:musify/widgets/song_bar.dart';
 import 'package:musify/widgets/sort_chips.dart';
 
@@ -50,6 +51,8 @@ class _UserSongsPageState extends State<UserSongsPage> {
   bool _isEditEnabled = false;
   List<dynamic> _originalOfflineSongsList = [];
   String _searchQuery = '';
+  late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
 
   List _getFilteredList(List songsList) {
     if (_searchQuery.isEmpty) return songsList;
@@ -64,9 +67,18 @@ class _UserSongsPageState extends State<UserSongsPage> {
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
+    _searchFocusNode = FocusNode();
     if (widget.page == 'offline') {
       _originalOfflineSongsList = List<dynamic>.from(userOfflineSongs);
     }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
   }
 
   @override
@@ -259,10 +271,12 @@ class _UserSongsPageState extends State<UserSongsPage> {
         ],
         if (songsLength > 0) ...[
           const SizedBox(height: 16),
-          PlaylistSearchBar(
-            query: _searchQuery,
+          CustomSearchBar(
+            controller: _searchController..text = _searchQuery,
+            focusNode: _searchFocusNode,
+            labelText: context.l10n!.search,
+            onSubmitted: (_) {},
             onChanged: (value) => setState(() => _searchQuery = value),
-            onCleared: () => setState(() => _searchQuery = ''),
           ),
         ],
         const SizedBox(height: 16),
@@ -285,63 +299,21 @@ class _UserSongsPageState extends State<UserSongsPage> {
       icon: Icon(FluentIcons.delete_24_regular, color: primaryColor),
       iconSize: 24,
       onPressed: () {
-        final colorScheme = Theme.of(context).colorScheme;
-
         showDialog(
           context: context,
           builder: (BuildContext context) {
-            return AlertDialog(
-              backgroundColor: colorScheme.surface,
-              surfaceTintColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-              icon: Icon(
-                FluentIcons.delete_24_regular,
-                color: colorScheme.error,
-                size: 32,
-              ),
-              title: Text(
-                context.l10n!.clearRecentlyPlayed,
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              content: Text(
-                context.l10n!.clearRecentlyPlayedQuestion,
-                style: TextStyle(color: colorScheme.onSurfaceVariant),
-                textAlign: TextAlign.center,
-              ),
-              actionsAlignment: MainAxisAlignment.center,
-              actions: [
-                OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: colorScheme.outline),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(context.l10n!.cancel),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    userRecentlyPlayed.clear();
-                    currentRecentlyPlayedLength.value = 0;
-                    addOrUpdateData('user', 'recentlyPlayedSongs', []);
-                    showToast(context, context.l10n!.recentlyPlayedMsg);
-                  },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: colorScheme.error,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(context.l10n!.clear),
-                ),
-              ],
+            return ConfirmationDialog(
+              confirmationMessage: context.l10n!.clearRecentlyPlayedQuestion,
+              submitMessage: context.l10n!.clear,
+              isDangerous: true,
+              onCancel: () => Navigator.pop(context),
+              onSubmit: () {
+                Navigator.pop(context);
+                userRecentlyPlayed.clear();
+                currentRecentlyPlayedLength.value = 0;
+                addOrUpdateData('user', 'recentlyPlayedSongs', []);
+                showToast(context, context.l10n!.recentlyPlayedMsg);
+              },
             );
           },
         );
@@ -416,7 +388,7 @@ class _UserSongsPageState extends State<UserSongsPage> {
               );
               return ReorderableDragStartListener(
                 enabled: _isEditEnabled,
-                key: ValueKey('${song['ytid']}_$index'),
+                key: ValueKey(song['ytid']),
                 index: index,
                 child: _buildSongBar(
                   song,
@@ -446,7 +418,7 @@ class _UserSongsPageState extends State<UserSongsPage> {
                 displayList.length,
               );
               return RepaintBoundary(
-                key: ValueKey('song_${song['ytid']}_$index'),
+                key: ValueKey(song['ytid']),
                 child: _buildSongBar(
                   song,
                   index,
@@ -472,7 +444,7 @@ class _UserSongsPageState extends State<UserSongsPage> {
     final isLikedSongs = playlist['title'] == context.l10n!.likedSongs;
 
     return SongBar(
-      key: ValueKey('${song['ytid']}_$index'),
+      key: ValueKey(song['ytid']),
       song,
       true,
       onPlay: () {

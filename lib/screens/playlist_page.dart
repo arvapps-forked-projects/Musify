@@ -38,10 +38,10 @@ import 'package:musify/utilities/flutter_toast.dart';
 import 'package:musify/utilities/offline_playlist_dialogs.dart';
 import 'package:musify/utilities/playlist_dialogs.dart';
 import 'package:musify/utilities/sort_utils.dart';
+import 'package:musify/widgets/custom_search_bar.dart';
 import 'package:musify/widgets/edit_playlist_dialog.dart';
 import 'package:musify/widgets/playlist_cube.dart';
 import 'package:musify/widgets/playlist_page/playlist_header.dart';
-import 'package:musify/widgets/playlist_page/playlist_search_bar.dart';
 import 'package:musify/widgets/song_bar.dart';
 import 'package:musify/widgets/sort_chips.dart';
 import 'package:musify/widgets/spinner.dart';
@@ -84,6 +84,8 @@ class _PlaylistPageState extends State<PlaylistPage> {
 
   // Search
   String _searchQuery = '';
+  late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
 
   List<dynamic> get _sourceList {
     final list = _playlist?['list'] as List<dynamic>? ?? [];
@@ -99,11 +101,15 @@ class _PlaylistPageState extends State<PlaylistPage> {
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
+    _searchFocusNode = FocusNode();
     _initializePlaylist();
   }
 
   @override
   void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -157,6 +163,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () =>
               Navigator.pop(context, widget.playlistData == _playlist),
+          tooltip: context.l10n!.back,
         ),
       ),
       body: _playlist != null
@@ -302,7 +309,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
                 _buildLikeButton(),
               if (!offlineMode.value) ...[
                 _buildAddToPlaylistButton(),
-                _buildSyncButton(),
+                if (!isUserCreated) _buildSyncButton(),
               ],
               if (songsLength > 0) _buildDownloadButton(),
               if (isUserCreated) ...[_buildShareButton(), _buildEditButton()],
@@ -327,10 +334,12 @@ class _PlaylistPageState extends State<PlaylistPage> {
         ],
         if (songsLength > 0) ...[
           const SizedBox(height: 16),
-          PlaylistSearchBar(
-            query: _searchQuery,
+          CustomSearchBar(
+            controller: _searchController..text = _searchQuery,
+            focusNode: _searchFocusNode,
+            labelText: context.l10n!.search,
+            onSubmitted: (_) {},
             onChanged: (value) => setState(() => _searchQuery = value),
-            onCleared: () => setState(() => _searchQuery = ''),
           ),
         ],
         const SizedBox(height: 16),
@@ -349,6 +358,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
         final url = 'musify://playlist/custom/$encodedPlaylist';
         await Clipboard.setData(ClipboardData(text: url));
       },
+      tooltip: context.l10n!.share,
     );
   }
 
@@ -375,6 +385,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
                   currentLikedPlaylistsLength.value =
                       currentLikedPlaylistsLength.value - 1;
                 },
+                tooltip: context.l10n!.removeFromLikedSongs,
               )
             : IconButton.filledTonal(
                 icon: Icon(icon),
@@ -390,6 +401,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
                   currentLikedPlaylistsLength.value =
                       currentLikedPlaylistsLength.value + 1;
                 },
+                tooltip: context.l10n!.addToLikedSongs,
               );
       },
     );
@@ -400,6 +412,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
       icon: const Icon(FluentIcons.arrow_sync_24_filled),
       iconSize: 24,
       onPressed: _handleSyncPlaylist,
+      tooltip: context.l10n!.update,
     );
   }
 
@@ -408,6 +421,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
       icon: const Icon(FluentIcons.album_add_24_regular),
       iconSize: 24,
       onPressed: _handleAddFullPlaylistToPlaylist,
+      tooltip: context.l10n!.addToPlaylist,
     );
   }
 
@@ -498,6 +512,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
           showToast(context, context.l10n!.playlistUpdated);
         }
       },
+      tooltip: context.l10n!.editPlaylist,
     );
   }
 
@@ -683,6 +698,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
     return SongBar(
       song,
       true,
+      key: ValueKey(song['ytid']),
       onRemove: (isRemovable && !isSearching)
           ? () {
               if (removeSongFromPlaylist(
