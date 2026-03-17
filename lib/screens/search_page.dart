@@ -158,28 +158,30 @@ class _SearchPageState extends State<SearchPage> {
                       _debounce?.cancel();
                       final query = value;
                       final requestId = ++_latestSuggestionRequest;
+
+                      // Clear suggestions immediately if input is empty
+                      if (query.isEmpty) {
+                        _suggestionsList = [];
+                        if (mounted) setState(() {});
+                        return;
+                      }
+
                       _debounce = Timer(
                         const Duration(milliseconds: 300),
                         () async {
-                          if (query.isNotEmpty) {
-                            final searchSuggestions =
-                                await getSearchSuggestions(query);
+                          final searchSuggestions = await getSearchSuggestions(
+                            query,
+                          );
 
-                            if (!mounted ||
-                                requestId != _latestSuggestionRequest ||
-                                _searchBar.text != query) {
-                              return;
-                            }
-
-                            _suggestionsList = List<String>.from(
-                              searchSuggestions,
-                            );
-                          } else {
-                            if (requestId != _latestSuggestionRequest) {
-                              return;
-                            }
-                            _suggestionsList = [];
+                          if (!mounted ||
+                              requestId != _latestSuggestionRequest ||
+                              _searchBar.text != query) {
+                            return;
                           }
+
+                          _suggestionsList = List<String>.from(
+                            searchSuggestions,
+                          );
                           if (mounted) setState(() {});
                         },
                       );
@@ -216,7 +218,7 @@ class _SearchPageState extends State<SearchPage> {
 
                         return Column(
                           key: ValueKey(
-                            'history-${_suggestionsList.length}-${_searchBar.text}-${searchHistory.length}',
+                            'history-${items.hashCode}-${_searchBar.text}',
                           ),
                           children: [
                             for (int index = 0; index < items.length; index++)
@@ -295,7 +297,7 @@ class _SearchPageState extends State<SearchPage> {
           SongBar(
             _songsSearchResult[index],
             true,
-            key: ValueKey('song_${_songsSearchResult[index]['ytid']}_$index'),
+            key: ValueKey('${_songsSearchResult[index]['ytid']}'),
             showMusicDuration: true,
             borderRadius: borderRadius,
           ),
@@ -323,7 +325,7 @@ class _SearchPageState extends State<SearchPage> {
 
         widgets.add(
           PlaylistBar(
-            key: ValueKey('album_${playlist['ytid']}_$index'),
+            key: ValueKey(playlist['ytid']),
             playlist['title'],
             playlistId: playlist['ytid'],
             playlistArtwork: playlist['image'],
@@ -357,7 +359,7 @@ class _SearchPageState extends State<SearchPage> {
           Padding(
             padding: isLast ? commonListViewBottomPadding : EdgeInsets.zero,
             child: PlaylistBar(
-              key: ValueKey('playlist_${playlist['ytid']}_$index'),
+              key: ValueKey(playlist['ytid']),
               playlist['title'],
               playlistId: playlist['ytid'],
               playlistArtwork: playlist['image'],
@@ -368,12 +370,7 @@ class _SearchPageState extends State<SearchPage> {
       }
     }
 
-    return Column(
-      key: ValueKey(
-        'results-${_songsSearchResult.length}-${_albumsSearchResult.length}-${_playlistsSearchResult.length}',
-      ),
-      children: widgets,
-    );
+    return Column(children: widgets);
   }
 
   Future<bool?> _showConfirmationDialog(BuildContext context) {
