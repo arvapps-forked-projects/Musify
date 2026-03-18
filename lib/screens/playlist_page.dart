@@ -112,23 +112,25 @@ class _PlaylistPageState extends State<PlaylistPage> {
 
   Future<void> _initializePlaylist() async {
     try {
-      if (widget.playlistData != null) {
-        _playlist = widget.playlistData;
+      final initialPlaylist = widget.playlistData;
+      final resolvedId =
+          initialPlaylist?['ytid']?.toString() ?? widget.playlistId;
+
+      if (initialPlaylist != null) {
+        _playlist = initialPlaylist;
         final playlistList = _playlist?['list'] as List?;
-        if (playlistList == null || playlistList.isEmpty) {
-          final resolvedId =
-              _playlist?['ytid']?.toString() ?? widget.playlistId;
-          final fullPlaylist = await getPlaylistInfoForWidget(
-            resolvedId,
-            isArtist: widget.isArtist,
-          );
-          if (fullPlaylist != null) {
-            _playlist = fullPlaylist;
-          }
+        if ((playlistList == null || playlistList.isEmpty) &&
+            resolvedId != null) {
+          _playlist =
+              await getPlaylistInfoForWidget(
+                resolvedId,
+                isArtist: widget.isArtist,
+              ) ??
+              initialPlaylist;
         }
       } else {
         _playlist = await getPlaylistInfoForWidget(
-          widget.playlistId,
+          resolvedId,
           isArtist: widget.isArtist,
         );
       }
@@ -503,7 +505,11 @@ class _PlaylistPageState extends State<PlaylistPage> {
   }
 
   Widget _buildDownloadButton() {
-    final playlistId = widget.playlistId ?? _playlist['title'];
+    final playlistId = _playlist?['ytid']?.toString() ?? widget.playlistId;
+
+    if (playlistId == null || playlistId.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return ValueListenableBuilder<List<dynamic>>(
       valueListenable: offlinePlaylistService.offlinePlaylists,
@@ -585,31 +591,24 @@ class _PlaylistPageState extends State<PlaylistPage> {
       showRemoveOfflinePlaylistDialog(context, playlistId);
 
   void _handleSyncPlaylist() async {
-    if (_playlist['ytid'] != null) {
-      final updated = await updatePlaylistList(context, _playlist['ytid']);
-      if (updated != null && mounted) {
-        setState(() {
-          _playlist = updated;
-          if (_playlist['list'] != null) {
-            _originalPlaylistList = List<dynamic>.from(
-              _playlist['list'] as List,
-            );
-          }
-        });
+    final playlistId = _playlist?['ytid']?.toString();
+    if (playlistId == null || playlistId.isEmpty) return;
+
+    if (offlinePlaylistService.isPlaylistDownloaded(playlistId)) {
+      if (mounted) {
+        showToast(context, context.l10n!.removeOffline);
       }
-    } else {
-      final resolvedId = _playlist['ytid']?.toString() ?? widget.playlistId;
-      final updatedPlaylist = await getPlaylistInfoForWidget(resolvedId);
-      if (updatedPlaylist != null && mounted) {
-        setState(() {
-          _playlist = updatedPlaylist;
-          if (_playlist['list'] != null) {
-            _originalPlaylistList = List<dynamic>.from(
-              _playlist['list'] as List,
-            );
-          }
-        });
-      }
+      return;
+    }
+
+    final updated = await updatePlaylistList(context, playlistId);
+    if (updated != null && mounted) {
+      setState(() {
+        _playlist = updated;
+        if (_playlist['list'] != null) {
+          _originalPlaylistList = List<dynamic>.from(_playlist['list'] as List);
+        }
+      });
     }
   }
 
