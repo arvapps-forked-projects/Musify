@@ -56,7 +56,46 @@ final pinnedPlaylistIds = ValueNotifier<List<String>>(
     Hive.box('user').get('pinnedPlaylistIds', defaultValue: <String>[]),
   ),
 );
-List onlinePlaylists = [];
+final onlinePlaylists = ValueNotifier<List>([]);
+void _updateOnlineCache(Map? p) {
+  if (p != null && !onlinePlaylists.value.any((x) => x['ytid'] == p['ytid'])) {
+    onlinePlaylists.value = [...onlinePlaylists.value, p];
+  }
+}
+
+Map? _searchAppPlaylistsById(String id) {
+  for (final p in userCustomPlaylists.value) {
+    if (p['ytid']?.toString() == id) return p as Map;
+  }
+  for (final f in userPlaylistFolders.value) {
+    for (final p in (f['playlists'] as List? ?? [])) {
+      if (p['ytid']?.toString() == id) return p as Map;
+    }
+  }
+  for (final p in userLikedPlaylists) {
+    if (p['ytid']?.toString() == id) return p as Map;
+  }
+  for (final p in onlinePlaylists.value) {
+    if (p['ytid']?.toString() == id) return p as Map;
+  }
+  for (final p in offlinePlaylistService.offlinePlaylists.value) {
+    if (p['ytid']?.toString() == id) return p as Map;
+  }
+  for (final p in playlists) {
+    if (p['ytid']?.toString() == id) return p as Map;
+  }
+  return null;
+}
+
+List<Map> resolvePinnedPlaylists(List<String> ids) {
+  if (ids.isEmpty) return [];
+  final result = <Map>[];
+  for (final id in ids) {
+    final match = _searchAppPlaylistsById(id);
+    if (match != null) result.add(match);
+  }
+  return result;
+}
 
 const pinnedPlaylistsLimit = 5;
 
@@ -71,33 +110,37 @@ String generateCustomPlaylistId() {
 }
 
 Future<List<dynamic>> getUserPlaylists() async {
-  final playlistsByUser = [];
-  for (final playlistID in userPlaylists.value) {
+  final futures = userPlaylists.value.map((playlistID) async {
     try {
       final plist = await ytClient.playlists.get(playlistID);
-      playlistsByUser.add({
+      return {
         'ytid': plist.id.toString(),
         'title': plist.title,
         'image': null,
         'source': 'user-youtube',
         'list': [],
-      });
+      };
     } catch (e, stackTrace) {
-      playlistsByUser.add({
-        'ytid': playlistID.toString(),
-        'title': 'Failed playlist',
-        'image': null,
-        'source': 'user-youtube',
-        'list': [],
-      });
       logger.log(
         'Error occurred while fetching the playlist:',
         error: e,
         stackTrace: stackTrace,
       );
+      return {
+        'ytid': playlistID.toString(),
+        'title': 'Failed playlist',
+        'image': null,
+        'source': 'user-youtube',
+        'list': [],
+      };
     }
+  });
+
+  final results = await Future.wait(futures);
+  for (final result in results) {
+    _updateOnlineCache(result);
   }
-  return playlistsByUser;
+  return results.toList();
 }
 
 Future<String> addUserPlaylist(String input, BuildContext context) async {
@@ -788,7 +831,7 @@ Future<List> getPlaylists({
       }
     }
 
-    final existingYtIds = onlinePlaylists
+    final existingYtIds = onlinePlaylists.value
         .map((p) => p['ytid'] as String)
         .toSet();
 
@@ -809,14 +852,8 @@ Future<List> getPlaylists({
         })
         .whereType<Map<String, dynamic>>()
         .toList();
-    onlinePlaylists.addAll(newPlaylists);
-
-    filteredPlaylists.addAll(
-      onlinePlaylists.where(
-        (p) => p['title'].toLowerCase().contains(lowercaseQuery),
-      ),
-    );
-    return filteredPlaylists;
+    onlinePlaylists.value = [...onlinePlaylists.value, ...newPlaylists];
+    return filteredPlaylists.isNotEmpty ? filteredPlaylists : onlinePlaylists.value.where((p) => p['title'].toLowerCase().contains(lowercaseQuery)).toList();
   }
 
   if (playlistsNum != null && query == null) {
@@ -965,7 +1002,7 @@ Future<Map?> _fetchYouTubePlaylist(String id) async {
   }
 
   // 3. Previously fetched online playlists.
-  playlist ??= _findPlaylistById(onlinePlaylists, id);
+  playlist ??= _findPlaylistById(onlinePlaylists.value, id);
 
   // 4. Fetch from YouTube as a last resort.
   if (playlist == null) {
@@ -978,7 +1015,7 @@ Future<Map?> _fetchYouTubePlaylist(String id) async {
         'source': 'user-youtube',
         'list': [],
       };
-      onlinePlaylists.add(playlist);
+      _updateOnlineCache(playlist);
     } catch (e, stackTrace) {
       logger.log(
         'Failed to fetch playlist info for id $id',

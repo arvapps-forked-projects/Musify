@@ -50,9 +50,7 @@ class PlaylistBar extends StatelessWidget {
     this.showBuildActions = true,
     this.isAlbum = false,
     this.borderRadius = BorderRadius.zero,
-  }) : playlistLikeStatus = ValueNotifier<bool>(
-         isPlaylistAlreadyLiked(playlistId),
-       );
+  });
 
   final Map? playlistData;
   final String? playlistId;
@@ -68,10 +66,8 @@ class PlaylistBar extends StatelessWidget {
   static const double artworkSize = 60;
   static const double iconSize = 27;
 
-  final ValueNotifier<bool> playlistLikeStatus;
-
   static const likeStatusToIconMapper = {
-    true: FluentIcons.heart_24_filled,
+    true: FluentIcons.heart_off_24_regular,
     false: FluentIcons.heart_24_regular,
   };
 
@@ -207,10 +203,9 @@ class PlaylistBar extends StatelessWidget {
         switch (value) {
           case 'like':
             if (_resolvedPlaylistId != null) {
-              final newValue = !playlistLikeStatus.value;
-              playlistLikeStatus.value = newValue;
-              updatePlaylistLikeStatus(_resolvedPlaylistId!, newValue);
-              currentLikedPlaylistsLength.value += newValue ? 1 : -1;
+              final isLiked = isPlaylistAlreadyLiked(_resolvedPlaylistId);
+              updatePlaylistLikeStatus(_resolvedPlaylistId!, !isLiked);
+              currentLikedPlaylistsLength.value += !isLiked ? 1 : -1;
             }
             break;
           case 'pin':
@@ -258,6 +253,9 @@ class PlaylistBar extends StatelessWidget {
         final isPinned =
             _resolvedPlaylistId != null &&
             pinnedIds.contains(_resolvedPlaylistId);
+        final isLiked =
+            _resolvedPlaylistId != null &&
+            isPlaylistAlreadyLiked(_resolvedPlaylistId);
         return [
           if (!isFolder && _resolvedPlaylistId != null)
             PopupMenuItem<String>(
@@ -285,12 +283,12 @@ class PlaylistBar extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    likeStatusToIconMapper[playlistLikeStatus.value],
+                    likeStatusToIconMapper[isLiked],
                     color: colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    playlistLikeStatus.value
+                    isLiked
                         ? context.l10n!.removeFromLikedPlaylists
                         : context.l10n!.addToLikedPlaylists,
                   ),
@@ -317,7 +315,7 @@ class PlaylistBar extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    FluentIcons.cloud_off_24_filled,
+                    FluentIcons.cloud_off_24_regular,
                     color: colorScheme.error,
                   ),
                   const SizedBox(width: 8),
@@ -337,7 +335,7 @@ class PlaylistBar extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    FluentIcons.folder_24_filled,
+                    FluentIcons.folder_24_regular,
                     color: colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
@@ -351,7 +349,7 @@ class PlaylistBar extends StatelessWidget {
               value: 'edit',
               child: Row(
                 children: [
-                  Icon(FluentIcons.edit_24_filled, color: colorScheme.primary),
+                  Icon(FluentIcons.edit_24_regular, color: colorScheme.primary),
                   const SizedBox(width: 8),
                   Text(
                     isFolder
@@ -367,7 +365,7 @@ class PlaylistBar extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    FluentIcons.delete_24_filled,
+                    FluentIcons.delete_24_regular,
                     color: isFolder ? colorScheme.error : colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
@@ -406,7 +404,7 @@ class PlaylistBar extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              FluentIcons.folder_arrow_right_24_filled,
+              FluentIcons.folder_arrow_right_24_regular,
               color: colorScheme.secondary,
               size: 28,
             ),
@@ -464,7 +462,7 @@ class PlaylistBar extends StatelessWidget {
                   children: [
                     if (hasLibrary)
                       _MoveToFolderItem(
-                        icon: FluentIcons.library_24_filled,
+                        icon: FluentIcons.library_24_regular,
                         iconColor: colorScheme.primary,
                         iconBgColor: colorScheme.primaryContainer,
                         label: context.l10n!.library,
@@ -477,7 +475,7 @@ class PlaylistBar extends StatelessWidget {
                       ),
                     ...availableFolders.map(
                       (folder) => _MoveToFolderItem(
-                        icon: FluentIcons.folder_24_filled,
+                        icon: FluentIcons.folder_24_regular,
                         iconColor: colorScheme.secondary,
                         iconBgColor: colorScheme.secondaryContainer,
                         label: folder['name'] as String,
@@ -536,7 +534,7 @@ class PlaylistBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Icon(
-        FluentIcons.folder_24_filled,
+        FluentIcons.folder_24_regular,
         size: 26,
         color: colorScheme.onSecondaryContainer,
       ),
@@ -702,7 +700,7 @@ class PlaylistBar extends StatelessWidget {
               );
               showToast(context, result);
             },
-            icon: const Icon(FluentIcons.save_20_filled),
+            icon: const Icon(FluentIcons.save_20_regular),
             label: Text(context.l10n!.update),
           ),
         ],

@@ -865,17 +865,21 @@ class MusifyAudioHandler extends BaseAudioHandler {
 
       if (index < _currentQueueIndex) {
         _currentQueueIndex--;
-      } else if (index == _currentQueueIndex && _queueList.isNotEmpty) {
-        // If removing the currently-loading song, reset loading state
-        if (_currentLoadingIndex == index) {
-          _currentLoadingIndex = -1;
-          _currentLoadingTransitionId = -1;
-        }
+      } else if (index == _currentQueueIndex) {
+        if (_queueList.isEmpty) {
+          await stop();
+        } else {
+          // If removing the currently-loading song, reset loading state
+          if (_currentLoadingIndex == index) {
+            _currentLoadingIndex = -1;
+            _currentLoadingTransitionId = -1;
+          }
 
-        if (_currentQueueIndex >= _queueList.length) {
-          _currentQueueIndex = _queueList.length - 1;
+          if (_currentQueueIndex >= _queueList.length) {
+            _currentQueueIndex = _queueList.length - 1;
+          }
+          await _playFromQueue(_currentQueueIndex);
         }
-        await _playFromQueue(_currentQueueIndex);
       }
 
       _hydrateQueueEntryIds();
@@ -1243,6 +1247,46 @@ class MusifyAudioHandler extends BaseAudioHandler {
   Future<void> rewind() =>
       seek(Duration(seconds: audioPlayer.position.inSeconds - 15));
 
+  Future<bool> _resolveOfflineAndSetPaths(Map songData) async {
+    try {
+      final ytid = songData['ytid']?.toString();
+      if (ytid != null && ytid.isNotEmpty) {
+        final offlineSong = getOfflineSongByYtid(ytid);
+        if (offlineSong.isNotEmpty) {
+          final audioPath = offlineSong['audioPath']?.toString();
+          if (audioPath != null && audioPath.isNotEmpty) {
+            final f = File(audioPath);
+            if (await f.exists()) {
+              songData['audioPath'] = audioPath;
+              if (offlineSong['artworkPath'] != null) {
+                songData['artworkPath'] = offlineSong['artworkPath'];
+              }
+              return true;
+            }
+          }
+        }
+      }
+    } catch (e, st) {
+      logger.log(
+        'Error while checking offline songs',
+        error: e,
+        stackTrace: st,
+      );
+    }
+
+    // Fallback: prefer an existing local `audioPath` on the passed song
+    // object if the file exists.
+    try {
+      final path = songData['audioPath']?.toString();
+      if (path != null && path.isNotEmpty) {
+        final f = File(path);
+        if (await f.exists()) return true;
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
   Future<bool> playSong(Map song, {String? mediaId}) async {
     try {
       final songData = cloneMap(song);
@@ -1253,27 +1297,10 @@ class MusifyAudioHandler extends BaseAudioHandler {
       }
 
       _lastError = null;
-      var isOffline = false;
-      try {
-        final ytid = songData['ytid'];
-        if (ytid != null && ytid.toString().isNotEmpty) {
-          final offlineSong = getOfflineSongByYtid(ytid.toString());
-          if (offlineSong.isNotEmpty &&
-              offlineSong['audioPath'] != null &&
-              offlineSong['audioPath'].toString().isNotEmpty) {
-            isOffline = true;
-            songData['audioPath'] = offlineSong['audioPath'];
-            if (offlineSong['artworkPath'] != null) {
-              songData['artworkPath'] = offlineSong['artworkPath'];
-            }
-          }
-        }
-      } catch (e, stackTrace) {
-        logger.log(
-          'Error while checking offline songs',
-          error: e,
-          stackTrace: stackTrace,
-        );
+      final playback = await _resolvePlaybackSource(songData);
+      if (playback == null) {
+        _lastError = 'Failed to get song URL';
+        return false;
       }
 
       if (audioPlayer.playing) await audioPlayer.pause();
@@ -1284,24 +1311,11 @@ class MusifyAudioHandler extends BaseAudioHandler {
         mediaId: mediaId,
       );
 
-      var songUrl = await _getSongUrl(songData, isOffline);
-
-      // If offline file is missing, try falling back to online
-      if ((songUrl == null || songUrl.isEmpty) && isOffline) {
-        logger.log(
-          'Offline file missing for ${songData['ytid']}, switching to online',
-        );
-        isOffline = false;
-        songUrl = await _getSongUrl(songData, isOffline);
-      }
-
-      if (songUrl == null || songUrl.isEmpty) {
-        logger.log('Failed to get song URL for ${songData['ytid']}');
-        _lastError = 'Failed to get song URL';
-        return false;
-      }
-
-      final audioSource = await buildAudioSource(songData, songUrl, isOffline);
+      final audioSource = await buildAudioSource(
+        songData,
+        playback.songUrl,
+        playback.isOffline,
+      );
       if (audioSource == null) {
         logger.log('Failed to build audio source for ${songData['ytid']}');
         _lastError = 'Failed to build audio source';
@@ -1311,8 +1325,8 @@ class MusifyAudioHandler extends BaseAudioHandler {
       return await _setAudioSourceAndPlay(
         songData,
         audioSource,
-        songUrl,
-        isOffline,
+        playback.songUrl,
+        playback.isOffline,
         mediaId: mediaId,
       );
     } catch (e, stackTrace) {
@@ -1322,12 +1336,42 @@ class MusifyAudioHandler extends BaseAudioHandler {
     }
   }
 
-  Future<String?> _getSongUrl(Map song, bool isOffline) async {
+  Future<_PlaybackSource?> _resolvePlaybackSource(Map songData) async {
+    final isOffline = await _resolveOfflineAndSetPaths(songData);
+    final songUrl = await _getPlaybackUrl(songData, isOffline);
+
+    if (songUrl == null || songUrl.isEmpty) {
+      if (!isOffline) {
+        logger.log('Failed to get song URL for ${songData['ytid']}');
+        return null;
+      }
+
+      logger.log(
+        'Offline file missing for ${songData['ytid']}, switching to online',
+      );
+
+      final onlineUrl = await fetchSongStreamUrl(
+        songData['ytid'],
+        songData['isLive'] ?? false,
+      );
+
+      if (onlineUrl == null || onlineUrl.isEmpty) {
+        logger.log('Failed to get song URL for ${songData['ytid']}');
+        return null;
+      }
+
+      return _PlaybackSource(songUrl: onlineUrl, isOffline: false);
+    }
+
+    return _PlaybackSource(songUrl: songUrl, isOffline: isOffline);
+  }
+
+  Future<String?> _getPlaybackUrl(Map song, bool isOffline) async {
     if (isOffline) {
       return _getOfflineSongUrl(song);
-    } else {
-      return fetchSongStreamUrl(song['ytid'], song['isLive'] ?? false);
     }
+
+    return fetchSongStreamUrl(song['ytid'], song['isLive'] ?? false);
   }
 
   Future<String?> _getOfflineSongUrl(Map song) async {
@@ -1599,6 +1643,9 @@ class MusifyAudioHandler extends BaseAudioHandler {
   }
 
   @override
+  Future<void> skipToQueueItem(int index) => skipToSong(index);
+
+  @override
   Future<void> skipToNext() async {
     try {
       if (_currentQueueIndex < _queueList.length - 1) {
@@ -1827,4 +1874,11 @@ class MusifyAudioHandler extends BaseAudioHandler {
       );
     }
   }
+}
+
+class _PlaybackSource {
+  const _PlaybackSource({required this.songUrl, required this.isOffline});
+
+  final String songUrl;
+  final bool isOffline;
 }
