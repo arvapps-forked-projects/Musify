@@ -20,7 +20,6 @@
  */
 
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/widgets.dart';
 import 'package:hive/hive.dart';
@@ -28,7 +27,6 @@ import 'package:musify/database/albums.db.dart';
 import 'package:musify/database/playlists.db.dart';
 import 'package:musify/extensions/l10n.dart';
 import 'package:musify/main.dart' show logger;
-import 'package:musify/services/common_services.dart';
 import 'package:musify/services/data_manager.dart';
 import 'package:musify/services/playlist_download_service.dart';
 import 'package:musify/services/proxy_manager.dart';
@@ -36,27 +34,28 @@ import 'package:musify/services/settings_manager.dart';
 import 'package:musify/utilities/app_utils.dart';
 import 'package:musify/utilities/flutter_toast.dart';
 import 'package:musify/utilities/formatter.dart';
+import 'package:musify/utilities/playlist_utils.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
-List playlists = [...playlistsDB, ...albumsDB];
-final userPlaylists = ValueNotifier<List>(
-  Hive.box('user').get('playlists', defaultValue: []),
+List<Map> playlists = [...playlistsDB, ...albumsDB];
+final userPlaylists = ValueNotifier<List<String>>(
+  List<String>.from(Hive.box('user').get('playlists', defaultValue: [])),
 );
-final userCustomPlaylists = ValueNotifier<List>(
-  Hive.box('user').get('customPlaylists', defaultValue: []),
+final userCustomPlaylists = ValueNotifier<List<Map>>(
+  List<Map>.from(Hive.box('user').get('customPlaylists', defaultValue: [])),
 );
-List userLikedPlaylists = Hive.box(
-  'user',
-).get('likedPlaylists', defaultValue: []);
-final userPlaylistFolders = ValueNotifier<List>(
-  Hive.box('user').get('playlistFolders', defaultValue: []),
+List<Map> userLikedPlaylists = List<Map>.from(
+  Hive.box('user').get('likedPlaylists', defaultValue: []),
+);
+final userPlaylistFolders = ValueNotifier<List<Map>>(
+  List<Map>.from(Hive.box('user').get('playlistFolders', defaultValue: [])),
 );
 final pinnedPlaylistIds = ValueNotifier<List<String>>(
   List<String>.from(
     Hive.box('user').get('pinnedPlaylistIds', defaultValue: <String>[]),
   ),
 );
-final onlinePlaylists = ValueNotifier<List>([]);
+final onlinePlaylists = ValueNotifier<List<Map>>([]);
 void _updateOnlineCache(Map? p) {
   if (p != null && !onlinePlaylists.value.any((x) => x['ytid'] == p['ytid'])) {
     onlinePlaylists.value = [...onlinePlaylists.value, p];
@@ -65,7 +64,7 @@ void _updateOnlineCache(Map? p) {
 
 Map? _searchAppPlaylistsById(String id) {
   for (final p in userCustomPlaylists.value) {
-    if (p['ytid']?.toString() == id) return p as Map;
+    if (p['ytid']?.toString() == id) return p;
   }
   for (final f in userPlaylistFolders.value) {
     for (final p in (f['playlists'] as List? ?? [])) {
@@ -73,16 +72,16 @@ Map? _searchAppPlaylistsById(String id) {
     }
   }
   for (final p in userLikedPlaylists) {
-    if (p['ytid']?.toString() == id) return p as Map;
+    if (p['ytid']?.toString() == id) return p;
   }
   for (final p in onlinePlaylists.value) {
-    if (p['ytid']?.toString() == id) return p as Map;
+    if (p['ytid']?.toString() == id) return p;
   }
   for (final p in offlinePlaylistService.offlinePlaylists.value) {
     if (p['ytid']?.toString() == id) return p as Map;
   }
   for (final p in playlists) {
-    if (p['ytid']?.toString() == id) return p as Map;
+    if (p['ytid']?.toString() == id) return p;
   }
   return null;
 }
@@ -103,12 +102,6 @@ final currentLikedPlaylistsLength = ValueNotifier<int>(
   userLikedPlaylists.length,
 );
 
-String generateCustomPlaylistId() {
-  final timestamp = DateTime.now().microsecondsSinceEpoch;
-  final randomSuffix = Random().nextInt(0x7fffffff);
-  return 'customId-$timestamp-$randomSuffix';
-}
-
 Future<List<dynamic>> getUserPlaylists() async {
   final futures = userPlaylists.value.map((playlistID) async {
     try {
@@ -127,7 +120,7 @@ Future<List<dynamic>> getUserPlaylists() async {
         stackTrace: stackTrace,
       );
       return {
-        'ytid': playlistID.toString(),
+        'ytid': playlistID,
         'title': 'Failed playlist',
         'image': null,
         'source': 'user-youtube',
@@ -178,7 +171,7 @@ Future<String> addUserPlaylist(String input, BuildContext context) async {
   String? image,
   BuildContext context,
 ) {
-  final newPlaylistId = generateCustomPlaylistId();
+  final newPlaylistId = PlaylistUtils.generateCustomPlaylistId();
   final creationTime = DateTime.now().millisecondsSinceEpoch;
   final customPlaylist = {
     'ytid': newPlaylistId,
@@ -201,29 +194,9 @@ String addSongInCustomPlaylist(
   Map song, {
   int? indexToInsert,
 }) {
-  Map? customPlaylist;
-  var isFromFolder = false;
-
-  for (final playlist in userCustomPlaylists.value) {
-    if (playlist['ytid'] == playlistId) {
-      customPlaylist = playlist as Map;
-      break;
-    }
-  }
-
-  if (customPlaylist == null) {
-    for (final folder in userPlaylistFolders.value) {
-      final folderPlaylists = folder['playlists'] as List<dynamic>? ?? [];
-      for (final playlist in folderPlaylists) {
-        if (playlist['ytid'] == playlistId) {
-          customPlaylist = playlist as Map;
-          isFromFolder = true;
-          break;
-        }
-      }
-      if (customPlaylist != null) break;
-    }
-  }
+  final found = _findCustomPlaylist(playlistId);
+  final customPlaylist = found?.playlist;
+  final isFromFolder = found?.isFromFolder ?? false;
 
   if (customPlaylist != null) {
     final List<dynamic> playlistSongs = customPlaylist['list'];
@@ -248,9 +221,6 @@ String addSongInCustomPlaylist(
       );
     }
 
-    if (offlinePlaylistService.isPlaylistDownloaded(playlistId)) {
-      unawaited(makeSongOffline(song));
-    }
     return context.l10n!.songAdded;
   } else {
     logger.log('Custom playlist not found for ytid: $playlistId');
@@ -275,35 +245,13 @@ String addSongsInCustomPlaylist(
   String playlistId,
   List<dynamic> songs,
 ) {
-  Map? customPlaylist;
-  var isFromFolder = false;
-
-  for (final playlist in userCustomPlaylists.value) {
-    if (playlist['ytid'] == playlistId) {
-      customPlaylist = playlist as Map;
-      break;
-    }
-  }
-
-  if (customPlaylist == null) {
-    for (final folder in userPlaylistFolders.value) {
-      final folderPlaylists = folder['playlists'] as List<dynamic>? ?? [];
-      for (final playlist in folderPlaylists) {
-        if (playlist['ytid'] == playlistId) {
-          customPlaylist = playlist as Map;
-          isFromFolder = true;
-          break;
-        }
-      }
-      if (customPlaylist != null) break;
-    }
-  }
+  final found = _findCustomPlaylist(playlistId);
+  final customPlaylist = found?.playlist;
+  final isFromFolder = found?.isFromFolder ?? false;
 
   if (customPlaylist != null) {
     final List<dynamic> playlistSongs = customPlaylist['list'];
-    var addedCount = 0;
 
-    final isOffline = offlinePlaylistService.isPlaylistDownloaded(playlistId);
     final newSongs = <dynamic>[];
     for (final song in songs) {
       final alreadyExists = playlistSongs.any(
@@ -312,11 +260,10 @@ String addSongsInCustomPlaylist(
       if (!alreadyExists) {
         playlistSongs.add(song);
         newSongs.add(song);
-        addedCount++;
       }
     }
 
-    if (addedCount > 0) {
+    if (newSongs.isNotEmpty) {
       if (isFromFolder) {
         unawaited(
           addOrUpdateData('user', 'playlistFolders', userPlaylistFolders.value),
@@ -325,11 +272,6 @@ String addSongsInCustomPlaylist(
         unawaited(
           addOrUpdateData('user', 'customPlaylists', userCustomPlaylists.value),
         );
-      }
-      if (isOffline) {
-        for (final song in newSongs) {
-          unawaited(makeSongOffline(song));
-        }
       }
       return context.l10n!.addedSuccess;
     } else {
@@ -420,8 +362,8 @@ void removeUserPlaylist(String playlistId) {
   final normalizedId = playlistId.trim();
   if (normalizedId.isEmpty) return;
 
-  final updatedPlaylists = List.from(userPlaylists.value)
-    ..removeWhere((id) => id?.toString() == normalizedId);
+  final updatedPlaylists = List<String>.from(userPlaylists.value)
+    ..removeWhere((id) => id == normalizedId);
   userPlaylists.value = updatedPlaylists;
 
   final foldersChanged = _removePlaylistFromFolders(normalizedId);
@@ -444,7 +386,7 @@ void removeUserPlaylistEntry(Map playlist) {
   if (playlistId.isEmpty) return;
 
   final source = playlist['source']?.toString();
-  if (source == 'user-created' || playlistId.startsWith('customId-')) {
+  if (PlaylistUtils.isCustomPlaylist(playlist)) {
     removeUserCustomPlaylist(playlistId);
     return;
   }
@@ -472,7 +414,7 @@ void removeUserCustomPlaylist(dynamic playlist) {
         .trim();
     if (playlistId == null || playlistId.isEmpty) return;
 
-    final updatedPlaylists = List.from(userCustomPlaylists.value)
+    final updatedPlaylists = List<Map>.from(userCustomPlaylists.value)
       ..removeWhere((p) => p['ytid']?.toString() == playlistId);
     userCustomPlaylists.value = updatedPlaylists;
 
@@ -602,7 +544,7 @@ String movePlaylistToFolder(
   try {
     final updatedFolders = List<Map>.from(userPlaylistFolders.value);
     final updatedCustomPlaylists = List<Map>.from(userCustomPlaylists.value);
-    final updatedYoutubePlaylists = List.from(userPlaylists.value);
+    final updatedYoutubePlaylists = List<String>.from(userPlaylists.value);
 
     for (final folder in updatedFolders) {
       final folderPlaylists = List<Map>.from(
@@ -681,7 +623,7 @@ String deletePlaylistFolder(String folderId, [BuildContext? context]) {
     if (folderToDelete.isNotEmpty) {
       final folderPlaylists = List<Map>.from(folderToDelete['playlists'] ?? []);
       final updatedCustomPlaylists = List<Map>.from(userCustomPlaylists.value);
-      final updatedYoutubePlaylists = List.from(userPlaylists.value);
+      final updatedYoutubePlaylists = List<String>.from(userPlaylists.value);
 
       for (final playlist in folderPlaylists) {
         if (playlist['source'] == 'user-created') {
@@ -853,7 +795,11 @@ Future<List> getPlaylists({
         .whereType<Map<String, dynamic>>()
         .toList();
     onlinePlaylists.value = [...onlinePlaylists.value, ...newPlaylists];
-    return filteredPlaylists.isNotEmpty ? filteredPlaylists : onlinePlaylists.value.where((p) => p['title'].toLowerCase().contains(lowercaseQuery)).toList();
+    return filteredPlaylists.isNotEmpty
+        ? filteredPlaylists
+        : onlinePlaylists.value
+              .where((p) => p['title'].toLowerCase().contains(lowercaseQuery))
+              .toList();
   }
 
   if (playlistsNum != null && query == null) {
@@ -893,7 +839,7 @@ bool playlistExistsAnywhere(String playlistId) {
   final normalizedId = playlistId.trim();
   if (normalizedId.isEmpty) return false;
 
-  if (userPlaylists.value.any((id) => id?.toString() == normalizedId)) {
+  if (userPlaylists.value.any((id) => id == normalizedId)) {
     return true;
   }
 
@@ -911,13 +857,6 @@ bool playlistExistsAnywhere(String playlistId) {
   }
 
   return false;
-}
-
-bool isCustomPlaylist(Map playlist) {
-  final source = playlist['source']?.toString();
-  final playlistId = playlist['ytid']?.toString();
-  return source == 'user-created' ||
-      (playlistId != null && playlistId.startsWith('customId-'));
 }
 
 int findPlaylistIndexByYtId(String ytid) {
@@ -938,7 +877,7 @@ Future<Map?> getPlaylistInfoForWidget(
   if (normalizedId.isEmpty || normalizedId == 'null') return null;
   if (isArtist) return _fetchArtistPlaylist(normalizedId);
   if (normalizedId.startsWith('customId-')) {
-    return _findCustomPlaylist(normalizedId);
+    return _findCustomPlaylist(normalizedId)?.playlist;
   }
 
   final offlinePlaylist = _findOfflinePlaylist(normalizedId);
@@ -964,16 +903,20 @@ Future<Map> _fetchArtistPlaylist(String artistName) async {
   }
 }
 
-Map? _findCustomPlaylist(String id) {
-  final rootPlaylist = _findPlaylistById(userCustomPlaylists.value, id);
-  if (rootPlaylist != null) return rootPlaylist;
-
+({Map playlist, bool isFromFolder})? _findCustomPlaylist(String playlistId) {
+  for (final playlist in userCustomPlaylists.value) {
+    if (playlist['ytid'] == playlistId) {
+      return (playlist: playlist, isFromFolder: false);
+    }
+  }
   for (final folder in userPlaylistFolders.value) {
     final folderPlaylists = folder['playlists'] as List<dynamic>? ?? [];
-    final folderPlaylist = _findPlaylistById(folderPlaylists, id);
-    if (folderPlaylist != null) return folderPlaylist;
+    for (final playlist in folderPlaylists) {
+      if (playlist['ytid'] == playlistId) {
+        return (playlist: playlist as Map, isFromFolder: true);
+      }
+    }
   }
-
   return null;
 }
 

@@ -44,6 +44,7 @@ import 'package:musify/services/update_manager.dart';
 import 'package:musify/theme/app_themes.dart';
 import 'package:musify/utilities/flutter_toast.dart';
 import 'package:musify/utilities/language_utils.dart';
+import 'package:musify/utilities/playlist_utils.dart';
 import 'package:musify/utilities/sharing_intent.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
@@ -311,7 +312,7 @@ void handleIncomingLink(Uri? uri) async {
         if (playlist != null) {
           // Ensure the incoming playlist has a unique id so it can be removed later
           if (playlist['ytid'] == null || playlist['ytid'].toString().isEmpty) {
-            playlist['ytid'] = generateCustomPlaylistId();
+            playlist['ytid'] = PlaylistUtils.generateCustomPlaylistId();
           }
           // Check for duplicate by title and song ytids
           final incomingYtids = (playlist['list'] as List<dynamic>)
@@ -319,7 +320,6 @@ void handleIncomingLink(Uri? uri) async {
               .toList();
 
           final exists = userCustomPlaylists.value.any((p) {
-            if (p == null) return false;
             if (p['title'] != playlist['title']) return false;
             final existingList = (p['list'] as List<dynamic>?) ?? [];
             final existingYtids = existingList

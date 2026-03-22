@@ -34,6 +34,7 @@ import 'package:musify/utilities/artwork_provider.dart';
 import 'package:musify/utilities/flutter_toast.dart';
 import 'package:musify/utilities/offline_playlist_dialogs.dart';
 import 'package:musify/utilities/playlist_dialogs.dart';
+import 'package:musify/utilities/playlist_utils.dart';
 import 'package:musify/widgets/edit_playlist_dialog.dart';
 import 'package:musify/widgets/spinner.dart';
 
@@ -73,7 +74,7 @@ class PlaylistBar extends StatelessWidget {
 
   // Helper to determine if this is a folder
   bool get isFolder =>
-      playlistData != null && playlistData!.containsKey('playlists');
+      playlistData != null && PlaylistUtils.isFolder(playlistData!);
 
   String? get _resolvedPlaylistId =>
       playlistId ?? playlistData?['ytid']?.toString();
@@ -277,7 +278,7 @@ class PlaylistBar extends StatelessWidget {
                 ],
               ),
             ),
-          if (onDelete == null || !isUserCreated)
+          if (!isFolder && (onDelete == null || !isUserCreated))
             PopupMenuItem<String>(
               value: 'like',
               child: Row(
@@ -629,7 +630,7 @@ class PlaylistBar extends StatelessWidget {
     );
 
     if (result != null) {
-      final index = userCustomPlaylists.value.indexOf(playlistData);
+      final index = userCustomPlaylists.value.indexOf(playlistData!);
       if (index != -1) {
         final updatedPlaylists = List<Map>.from(userCustomPlaylists.value);
         updatedPlaylists[index] = result;
