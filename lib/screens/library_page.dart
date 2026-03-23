@@ -265,20 +265,30 @@ class _LibraryPageState extends State<LibraryPage> {
       }
     }
 
-    final offlinePlaylists = offlinePlaylistService.offlinePlaylists.value;
-    if (offlinePlaylists.isNotEmpty) {
-      slivers
-        ..add(
-          SliverToBoxAdapter(
-            child: SectionHeader(
-              title: context.l10n!.offlinePlaylists,
-              icon: FluentIcons.cloud_off_24_filled,
+    if (!offlineMode.value) {
+      final rawOfflinePlaylists = offlinePlaylistService.offlinePlaylists.value;
+      final offlinePlaylists = PlaylistUtils.filterOfflinePlaylistsNotInFolders(
+        rawOfflinePlaylists,
+        folders,
+      );
+
+      if (offlinePlaylists.isNotEmpty) {
+        slivers
+          ..add(
+            SliverToBoxAdapter(
+              child: SectionHeader(
+                title: context.l10n!.offlinePlaylists,
+                icon: FluentIcons.cloud_off_24_filled,
+              ),
             ),
-          ),
-        )
-        ..add(
-          _buildSliverPlaylistList(offlinePlaylists, isOfflinePlaylists: true),
-        );
+          )
+          ..add(
+            _buildSliverPlaylistList(
+              offlinePlaylists,
+              isOfflinePlaylists: true,
+            ),
+          );
+      }
     }
 
     if (!offlineMode.value && userPlaylists.value.isNotEmpty) {
@@ -486,9 +496,6 @@ class _LibraryPageState extends State<LibraryPage> {
       final colorScheme = Theme.of(context).colorScheme;
 
       return AlertDialog(
-        backgroundColor: colorScheme.surface,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         icon: Container(
           width: 56,
           height: 56,
