@@ -37,6 +37,7 @@ import 'package:musify/utilities/app_utils.dart';
 import 'package:musify/utilities/flutter_toast.dart';
 import 'package:musify/utilities/offline_playlist_dialogs.dart';
 import 'package:musify/utilities/playlist_dialogs.dart';
+import 'package:musify/utilities/playlist_utils.dart';
 import 'package:musify/utilities/song_filtering.dart';
 import 'package:musify/utilities/sort_utils.dart';
 import 'package:musify/widgets/edit_playlist_dialog.dart';
@@ -683,9 +684,13 @@ class _PlaylistPageState extends State<PlaylistPage> {
     final isUserCreatedPlaylist = _playlist?['source'] == 'user-created';
     final playlistId = isUserCreatedPlaylist ? _playlist!['ytid'] : null;
     final isSearching = _searchQueryNotifier.value.isNotEmpty;
-    final playlistForQueue = isSearching
-        ? {..._playlist as Map, 'list': sourceList}
-        : _playlist;
+    final fullIndex = isSearching
+        ? PlaylistUtils.findSongIndexByYtid(_playlist, song['ytid'])
+        : index;
+
+    if (isSearching && fullIndex == -1) {
+      logger.log('Warning: Song ${song['ytid']} not found in full playlist');
+    }
 
     return SongBar(
       song,
@@ -704,8 +709,8 @@ class _PlaylistPageState extends State<PlaylistPage> {
           : null,
       onPlay: () {
         audioHandler.playPlaylistSong(
-          playlist: playlistForQueue,
-          songIndex: index,
+          playlist: _playlist,
+          songIndex: fullIndex != -1 ? fullIndex : index,
         );
       },
       borderRadius: borderRadius,
